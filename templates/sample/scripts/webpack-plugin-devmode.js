@@ -116,6 +116,7 @@ import { parsePluginScript, scriptUpdater } from './script-updater.js';
 const DEV_SERVER_URL = '${this.wssUrl}';
 const MAX_RECONNECT_DELAY = 30000; // 30 seconds
 const INITIAL_RECONNECT_DELAY = 1000; // 1 second
+const MAX_ERROR_LOGS = 3; // Maximum error logs to display
 
 class HotReloadClient {
   constructor() {
@@ -123,6 +124,7 @@ class HotReloadClient {
     this.reconnectAttempts = 0;
     this.reconnectTimeout = null;
     this.isIntentionallyClosed = false;
+    this.errorLogCount = 0; // Track error log count
   }
 
   /**
@@ -135,12 +137,15 @@ class HotReloadClient {
     }
 
     try {
-      console.log('[HotReload] Connecting to dev server:', DEV_SERVER_URL);
+      if (this.errorLogCount < MAX_ERROR_LOGS) {
+        console.log('[HotReload] Connecting to dev server:', DEV_SERVER_URL);
+      }
       this.ws = new WebSocket(DEV_SERVER_URL);
 
       this.ws.onopen = () => {
         console.log('[HotReload] ✅ Connected to dev server');
         this.reconnectAttempts = 0; // Reset on successful connection
+        this.errorLogCount = 0; // Reset error log count on successful connection
       };
 
       this.ws.onmessage = (event) => {
@@ -148,7 +153,13 @@ class HotReloadClient {
       };
 
       this.ws.onclose = (event) => {
-        console.log(\`[HotReload] Disconnected (code: \${event.code}, reason: \${event.reason || 'unknown'})\`);
+        if (this.errorLogCount < MAX_ERROR_LOGS) {
+          console.log(\`[HotReload] Disconnected (code: \${event.code}, reason: \${event.reason || 'unknown'})\`);
+          this.errorLogCount++;
+        } else if (this.errorLogCount === MAX_ERROR_LOGS) {
+          console.log('[HotReload] Connection errors suppressed (max logs reached). Retrying silently...');
+          this.errorLogCount++;
+        }
 
         if (!this.isIntentionallyClosed) {
           this.scheduleReconnect();
@@ -156,11 +167,16 @@ class HotReloadClient {
       };
 
       this.ws.onerror = (error) => {
-        console.error('[HotReload] WebSocket error:', error.message || error);
+        if (this.errorLogCount < MAX_ERROR_LOGS) {
+          console.error('[HotReload] WebSocket error:', error.message || error);
+        }
       };
 
     } catch (error) {
-      console.error('[HotReload] Connection failed:', error);
+      if (this.errorLogCount < MAX_ERROR_LOGS) {
+        console.error('[HotReload] Connection failed:', error);
+        this.errorLogCount++;
+      }
       this.scheduleReconnect();
     }
   }
@@ -291,7 +307,9 @@ class HotReloadClient {
       MAX_RECONNECT_DELAY
     );
 
-    console.log(\`[HotReload] Reconnecting in \${delay / 1000}s... (attempt \${this.reconnectAttempts + 1})\`);
+    if (this.errorLogCount < MAX_ERROR_LOGS) {
+      console.log(\`[HotReload] Reconnecting in \${delay / 1000}s... (attempt \${this.reconnectAttempts + 1})\`);
+    }
 
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectAttempts++;

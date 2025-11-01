@@ -4,16 +4,16 @@
   "description": "RisuAI Plugin arguments definition. This file is used to auto-generate plugin-config.js and banner @arg entries.",
   "args": [
     {
-      "name": "test123",
+      "name": "arg1",
       "type": "string",
-      "default": "test",
-      "description": "Test argument"
+      "default": "",
+      "description": "Argument 1"
     },
     {
-      "name": "watchTest21",
+      "name": "arg2",
       "type": "int",
-      "default": 999,
-      "description": "Testing webpack watch mode"
+      "default": 0,
+      "description": "Argument 2"
     }
   ]
 }

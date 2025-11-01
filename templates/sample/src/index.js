@@ -38,8 +38,6 @@ import "./ui/components"; // Web Components 레지스트리
       });
     }
 
-    alert("얼싸가좋다 김일병 신나는 어깨춤")
-
     // 4. 외부 스크립트 import(script 태그 추가)
     injectScripts();
 
