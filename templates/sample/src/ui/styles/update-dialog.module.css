@@ -1,0 +1,176 @@
+/* UpdateDialog 컴포넌트 스타일 - CSS Modules */
+
+.udRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.udCard {
+  width: min(520px, 92vw);
+  border-radius: 16px;
+  padding: 20px;
+  background: var(--bg, #111);
+  color: var(--fg, #eaeaea);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  transform: scale(0.97);
+  animation: udPop 0.16s ease-out forwards;
+}
+
+.udTitle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.udTitle h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.udPill {
+  font: 12px/1.8 system-ui;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #2a2a2a;
+  color: #cfcfcf;
+}
+
+.udSub {
+  margin: 8px 0 12px;
+  color: #9aa0a6;
+  font: 13px/1.5 system-ui;
+}
+
+.udList {
+  margin: 10px 0 16px;
+  padding-left: 18px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.udList li {
+  margin: 6px 0;
+}
+
+.udFeat::marker {
+  content: "✨ ";
+}
+
+.udFix::marker {
+  content: "🔧 ";
+}
+
+.udPerf::marker {
+  content: "⚡ ";
+}
+
+.udBreak::marker {
+  content: "⚠️ ";
+}
+
+.udActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.udBtn {
+  border: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.udBtnPrimary {
+  border: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  background: #4f7cff;
+  color: white;
+}
+
+.udBtnGhost {
+  border: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  background: transparent;
+  color: #cfcfcf;
+}
+
+.udBtn:hover,
+.udBtnPrimary:hover,
+.udBtnGhost:hover {
+  filter: brightness(1.05);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #fff;
+    --fg: #111;
+  }
+  .udCard {
+    background: #fff;
+    color: #111;
+  }
+  .udPill {
+    background: #eef2ff;
+    color: #1f3fb3;
+  }
+  .udSub {
+    color: #4b5563;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .udCard {
+    animation: none;
+    transform: none;
+  }
+}
+
+@keyframes udPop {
+  to {
+    transform: scale(1);
+  }
+}
+
+/* AlertDialog 컴포넌트 스타일 */
+.udAlert {
+  max-width: 420px;
+  text-align: center;
+}
+
+.udAlertMessage {
+  margin: 16px 0 20px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--fg, #eaeaea);
+  white-space: pre-line;
+}
+
+.udAlert .udActions {
+  justify-content: center;
+}
+
+.udAlert .udBtn,
+.udAlert .udBtnPrimary,
+.udAlert .udBtnGhost {
+  min-width: 120px;
+}
+
+@media (prefers-color-scheme: light) {
+  .udAlertMessage {
+    color: var(--fg, #111);
+  }
+}

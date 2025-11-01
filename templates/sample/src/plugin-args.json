@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Plugin Arguments Configuration",
+  "description": "RisuAI Plugin arguments definition. This file is used to auto-generate plugin-config.js and banner @arg entries.",
+  "args": [
+    {
+      "name": "test123",
+      "type": "string",
+      "default": "test",
+      "description": "Test argument"
+    },
+    {
+      "name": "watchTest21",
+      "type": "int",
+      "default": 999,
+      "description": "Testing webpack watch mode"
+    }
+  ]
+}

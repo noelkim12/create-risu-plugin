@@ -1,0 +1,50 @@
+{
+  "name": "create-risu-plugin",
+  "version": "1.0.0",
+  "description": "CLI tool to scaffold RisuAI plugin projects with Hot Reload, auto-update, and modern development stack",
+  "main": "lib/createProject.js",
+  "type": "module",
+  "bin": {
+    "create-risu-plugin": "./bin/index.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "templates/"
+  ],
+  "keywords": [
+    "risu-ai",
+    "risu",
+    "risuai",
+    "plugin",
+    "cli",
+    "scaffold",
+    "generator",
+    "template",
+    "create",
+    "boilerplate",
+    "hot-reload",
+    "webpack"
+  ],
+  "author": "Chaebboong",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YOUR_USERNAME/create-risu-plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YOUR_USERNAME/create-risu-plugin/issues"
+  },
+  "homepage": "https://github.com/YOUR_USERNAME/create-risu-plugin#readme",
+  "engines": {
+    "node": ">=14.0.0",
+    "npm": ">=6.0.0"
+  },
+  "dependencies": {
+    "inquirer": "^9.0.0",
+    "chalk": "^5.0.0",
+    "execa": "^9.0.0",
+    "fs-extra": "^11.0.0"
+  }
+}
+  
