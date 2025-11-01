@@ -1,6 +1,6 @@
 {
   "name": "create-risu-plugin",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CLI tool to scaffold RisuAI plugin projects with Hot Reload, auto-update, and modern development stack",
   "main": "lib/createProject.js",
   "type": "module",
