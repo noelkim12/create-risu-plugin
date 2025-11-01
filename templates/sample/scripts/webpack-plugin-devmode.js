@@ -3,9 +3,10 @@
  *
  * This plugin:
  * 1. Detects development mode (NODE_ENV=development)
- * 2. Auto-generates src/core/dev-reload.js with WebSocket client code
- * 3. Adds @dev-mode and @dev-server to webpack banner
- * 4. Only activates in development mode (production builds are unaffected)
+ * 2. Reads actual port from .dev-server-port file
+ * 3. Auto-generates src/core/dev-reload.js with WebSocket client code
+ * 4. Adds @dev-mode and @dev-server to webpack banner
+ * 5. Only activates in development mode (production builds are unaffected)
  */
 
 const fs = require('fs');
@@ -13,9 +14,34 @@ const path = require('path');
 
 class DevModeWebpackPlugin {
   constructor(options = {}) {
-    this.wssUrl = options.wssUrl || 'ws://localhost:13131';
+    this.defaultPort = options.defaultPort || 13131;
+    this.portFilePath = options.portFilePath || path.resolve(__dirname, '../.dev-server-port');
     this.outputFilePath = options.outputFilePath || path.resolve(__dirname, '../src/core/dev-reload.js');
     this.isDevelopment = process.env.NODE_ENV === 'development';
+    this.actualPort = this.getActualPort();
+    this.wssUrl = `ws://localhost:${this.actualPort}`;
+  }
+
+  /**
+   * Read actual port from .dev-server-port file
+   * @returns {number} Actual port number
+   */
+  getActualPort() {
+    try {
+      if (fs.existsSync(this.portFilePath)) {
+        const portStr = fs.readFileSync(this.portFilePath, 'utf8').trim();
+        const port = parseInt(portStr, 10);
+        if (!isNaN(port) && port > 0) {
+          console.log(`[DevModePlugin] Using port from file: ${port}`);
+          return port;
+        }
+      }
+    } catch (error) {
+      console.warn('[DevModePlugin] Failed to read port file:', error.message);
+    }
+
+    console.log(`[DevModePlugin] Using default port: ${this.defaultPort}`);
+    return this.defaultPort;
   }
 
   apply(compiler) {
@@ -349,8 +375,23 @@ function getDevModeBanner() {
     return '';
   }
 
+  // Read actual port from file
+  let actualPort = 13131;
+  try {
+    const portFilePath = path.resolve(__dirname, '../.dev-server-port');
+    if (fs.existsSync(portFilePath)) {
+      const portStr = fs.readFileSync(portFilePath, 'utf8').trim();
+      const port = parseInt(portStr, 10);
+      if (!isNaN(port) && port > 0) {
+        actualPort = port;
+      }
+    }
+  } catch (error) {
+    // Fallback to default port
+  }
+
   return `//@dev-mode true
-//@dev-server ws://localhost:13131`;
+//@dev-server ws://localhost:${actualPort}`;
 }
 
 module.exports = {

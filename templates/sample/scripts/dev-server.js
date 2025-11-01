@@ -2,34 +2,99 @@
  * WebSocket Development Server for Hot Reload
  *
  * This server:
- * 1. Listens on ws://localhost:13131
- * 2. Watches dist/cdn-test1.js for changes
- * 3. Broadcasts reload messages to all connected clients
- * 4. Handles client reconnection gracefully
+ * 1. Automatically finds an available port (starting from 13131)
+ * 2. Saves the actual port to .dev-server-port file
+ * 3. Watches dist file for changes
+ * 4. Broadcasts reload messages to all connected clients
+ * 5. Handles client reconnection gracefully
  */
 
 const WebSocket = require('ws');
 const chokidar = require('chokidar');
 const path = require('path');
 const fs = require('fs');
+const net = require('net');
 const pkg = require('../package.json');
 const { toKebabCase } = require('./script-util.js');
 
 // Configuration
-const DEV_SERVER_PORT = 13131;
+const DEFAULT_PORT = 13131;
+const MAX_PORT_ATTEMPTS = 10;
+const PORT_FILE_PATH = path.resolve(__dirname, '../.dev-server-port');
 const DIST_FILE = path.resolve(__dirname, `../dist/${toKebabCase(pkg.name)}.js`);
 
 // State
 let wss = null;
 let watcher = null;
+let actualPort = null;
 const clients = new Set();
 
 /**
- * Initialize WebSocket Server
+ * Check if a port is available
+ * @param {number} port - Port number to check
+ * @returns {Promise<boolean>} True if port is available
  */
-function initWebSocketServer() {
+function isPortAvailable(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+
+    server.once('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        resolve(false);
+      } else {
+        resolve(false);
+      }
+    });
+
+    server.once('listening', () => {
+      server.close();
+      resolve(true);
+    });
+
+    server.listen(port);
+  });
+}
+
+/**
+ * Find an available port starting from the default port
+ * @param {number} startPort - Starting port number
+ * @returns {Promise<number>} Available port number
+ */
+async function findAvailablePort(startPort = DEFAULT_PORT) {
+  for (let i = 0; i < MAX_PORT_ATTEMPTS; i++) {
+    const port = startPort + i;
+    const available = await isPortAvailable(port);
+    if (available) {
+      return port;
+    }
+    console.log(`[DevServer] Port ${port} is in use, trying next...`);
+  }
+
+  throw new Error(`[DevServer] No available ports found in range ${startPort}-${startPort + MAX_PORT_ATTEMPTS - 1}`);
+}
+
+/**
+ * Save the actual port to a file for webpack plugin to read
+ * @param {number} port - Port number to save
+ */
+function savePortToFile(port) {
+  try {
+    fs.writeFileSync(PORT_FILE_PATH, port.toString(), 'utf8');
+    console.log(`[DevServer] Port saved to ${PORT_FILE_PATH}`);
+  } catch (error) {
+    console.error('[DevServer] Failed to save port file:', error.message);
+  }
+}
+
+/**
+ * Initialize WebSocket Server
+ * @param {number} port - Port number to use
+ */
+function initWebSocketServer(port) {
+  actualPort = port;
+
   wss = new WebSocket.Server({
-    port: DEV_SERVER_PORT,
+    port: actualPort,
     clientTracking: true
   });
 
@@ -39,11 +104,11 @@ function initWebSocketServer() {
 
     console.log(`[DevServer] Client connected: ${clientId} (${clients.size} total)`);
 
-    // Send welcome message
+    // Send welcome message with actual port
     ws.send(JSON.stringify({
       type: 'connected',
       message: 'Hot reload enabled',
-      port: DEV_SERVER_PORT,
+      port: actualPort,
       watching: DIST_FILE,
     }));
 
@@ -73,15 +138,13 @@ function initWebSocketServer() {
   });
 
   wss.on('error', (error) => {
-    if (error.code === 'EADDRINUSE') {
-      console.error(`[DevServer] Port ${DEV_SERVER_PORT} is already in use. Please close other dev servers.`);
-      process.exit(1);
-    } else {
-      console.error('[DevServer] Server error:', error);
-    }
+    console.error('[DevServer] Server error:', error);
   });
 
-  console.log(`\n🚀 [DevServer] WebSocket server started on ws://localhost:${DEV_SERVER_PORT}`);
+  // Save port to file for webpack plugin
+  savePortToFile(actualPort);
+
+  console.log(`\n🚀 [DevServer] WebSocket server started on ws://localhost:${actualPort}`);
   console.log(`📂 [DevServer] Watching: ${DIST_FILE}\n`);
 }
 
@@ -178,6 +241,20 @@ function shutdown() {
   }
 }
 
+/**
+ * Cleanup port file on shutdown
+ */
+function cleanupPortFile() {
+  try {
+    if (fs.existsSync(PORT_FILE_PATH)) {
+      fs.unlinkSync(PORT_FILE_PATH);
+      console.log('[DevServer] Cleaned up port file');
+    }
+  } catch (error) {
+    console.error('[DevServer] Failed to cleanup port file:', error.message);
+  }
+}
+
 // Handle process signals
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
@@ -186,9 +263,29 @@ process.on('uncaughtException', (error) => {
   shutdown();
 });
 
-// Start server
-initWebSocketServer();
-initFileWatcher();
+/**
+ * Start the development server
+ */
+async function startServer() {
+  try {
+    // Find available port
+    console.log(`[DevServer] Looking for available port starting from ${DEFAULT_PORT}...`);
+    const port = await findAvailablePort(DEFAULT_PORT);
 
-// Keep process alive
-console.log('💡 Press Ctrl+C to stop the dev server\n');
+    // Initialize WebSocket server
+    initWebSocketServer(port);
+
+    // Initialize file watcher
+    initFileWatcher();
+
+    // Keep process alive
+    console.log('💡 Press Ctrl+C to stop the dev server\n');
+
+  } catch (error) {
+    console.error('[DevServer] Failed to start server:', error.message);
+    process.exit(1);
+  }
+}
+
+// Start server
+startServer();

@@ -86,8 +86,10 @@ module.exports = {
   // 플러그인 설정 (순서대로 실행됨)
   plugins: [
     // Development Mode Hot Reload (개발 모드 전용)
+    // Port is automatically detected from .dev-server-port file
     new DevModeWebpackPlugin({
-      wssUrl: 'ws://localhost:13131',
+      defaultPort: 13131,
+      portFilePath: path.resolve(__dirname, '.dev-server-port'),
       outputFilePath: path.resolve(__dirname, 'src/core/dev-reload.js'),
     }),
 
