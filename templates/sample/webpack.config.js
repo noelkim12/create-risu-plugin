@@ -82,6 +82,16 @@ module.exports = {
   resolve: {
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.css']
   },
+  
+  // Watch 옵션 (무한 루프 방지)
+  watchOptions: {
+    ignored: [
+      // 자동 생성되는 파일들은 watch에서 제외 (무한 루프 방지)
+      '**/src/core/plugin-config.js',
+      '**/src/core/dev-reload.js',
+      '**/node_modules/**',
+    ],
+  },
 
   // 플러그인 설정 (순서대로 실행됨)
   plugins: [
