@@ -1,7 +1,0 @@
-# npmignore 파일
-# .gitignore 파일을 명시적으로 포함시키기 위해 사용
-
-# .gitignore 파일은 포함시킴
-!.gitignore
-!**/.gitignore
-
