@@ -79,8 +79,6 @@ class PluginArgsWebpackPlugin {
  * 1. Edit src/plugin-args.json
  * 2. Run npm run build
  * 3. This file will be regenerated automatically
- *
- * Generated at: ${new Date().toISOString()}
  */
 
 import { PLUGIN_NAME } from '../constants.js';

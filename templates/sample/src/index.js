@@ -31,12 +31,9 @@ import "./ui/components"; // Web Components 레지스트리
     }
 
     // 3. 업데이트 체크 (백그라운드, silent 모드-로그 최소화)
-    // 개발 모드에서는 업데이트 체크 비활성화
-    if (!__DEV_MODE__) {
-      checkForUpdates({ silent: true }).catch(err => {
-        console.warn('[App] Update check failed:', err);
-      });
-    }
+    checkForUpdates({ silent: true }).catch(err => {
+      console.warn('[App] Update check failed:', err);
+    });
 
     // 4. 외부 스크립트 import(script 태그 추가)
     injectScripts();
