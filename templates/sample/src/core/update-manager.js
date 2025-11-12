@@ -1,6 +1,7 @@
 import { PLUGIN_NAME, PLUGIN_VERSION } from "../constants.js";
 import { RisuAPI } from "./risu-api.js";
 import { showAlert } from "../ui/components/updateManager/alert-dialog.js";
+import { showLoading } from "../ui/components/updateManager/loading-dialog.js";
 import { UPDATE_DIALOG_TAG } from "../ui/components/updateManager/update-dialog.js";
 import { parsePluginScript, scriptUpdater } from "./script-updater.js";
 /**
@@ -227,11 +228,17 @@ function checkVersionUpdateNeeded(latestVersion, currentVersion, silent) {
  */
 async function executeUpdate(manifest, latestVersion) {
   console.log("[UpdateManager] Updating to version", latestVersion);
-  console.log("update test")  
+
+  // 업데이트 스크립트 실행
   const updateResult = await updatePluginScript(manifest);
 
-  if (updateResult.success) {  
+  if (updateResult.success) {
     console.log("[UpdateManager] Plugin script updated successfully");
+
+    // 3초간 로딩 다이얼로그 표시 (스크립트 적용 시간 확보)
+    await showLoading("업데이트를 적용하고 있습니다...", 4000);
+
+    // 업데이트 완료 알림 및 새로고침
     await showAlert("업데이트가 완료되었습니다.\n\n업데이트된 스크립트를 적용하기 위해\n페이지를 새로고침합니다.");
     window.location.reload();
     return { available: true, action: "updated", version: latestVersion };
