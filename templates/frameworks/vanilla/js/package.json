@@ -1,0 +1,53 @@
+{
+  "name": "cdn-test1",
+  "version": "0.1.0",
+  "description": "Cdn Test1 for RISU AI",
+  "main": "src/index.js",
+  "browser": "dist/cdn_test1.js",
+  "unpkg": "dist/cdn_test1.js",
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "risu-ai",
+    "cdn",
+    "plugin"
+  ],
+  "author": "Chaebboong",
+  "license": "MIT",
+  "scripts": {
+    "prepublishOnly": "npm run build",
+    "dev": "cross-env NODE_ENV=development concurrently \"npm run dev:server\" \"npm run dev:vite\"",
+    "dev:server": "node scripts/dev-server.js",
+    "dev:vite": "cross-env NODE_ENV=development vite build --watch",
+    "build": "vite build",
+    "build:dev": "cross-env NODE_ENV=development vite build",
+    "lint": "eslint src --ext .js",
+    "lint:fix": "eslint src --ext .js --fix",
+    "format": "prettier --write \"src/**/*.{js,json,css}\"",
+    "format:check": "prettier --check \"src/**/*.{js,json,css}\"",
+    "release": "node scripts/release.js",
+    "release:minor": "node scripts/release.js -- minor",
+    "release:patch": "node scripts/release.js -- patch",
+    "release:major": "node scripts/release.js -- major"
+  },
+  "devDependencies": {
+    "chokidar": "^4.0.3",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "terser": "^5.36.0",
+    "vite": "^5.0.0",
+    "vite-plugin-css-injected-by-js": "^3.5.0",
+    "ws": "^8.18.3"
+  },
+  "dependencies": {
+    "idb": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=14.0.0",
+    "npm": ">=6.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
