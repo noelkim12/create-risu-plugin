@@ -4,11 +4,11 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import ReactDOM from 'react-dom/client';
 
+import { renderDialog } from '../../utils/dialog-root.js';
 import { updateDialogStyles as s } from '../../styles/index.js';
 
-export function AlertDialog({ message = '', confirmText = '확인', onConfirm }) {
+export function AlertDialog({ message = '', confirmText = '확인', onDialogComplete }) {
   const confirmButtonRef = useRef(null);
 
   // 포커스 설정 및 키보드 이벤트 리스너
@@ -31,8 +31,8 @@ export function AlertDialog({ message = '', confirmText = '확인', onConfirm })
   }, []);
 
   const handleConfirm = () => {
-    if (onConfirm) {
-      onConfirm();
+    if (onDialogComplete) {
+      onDialogComplete();
     }
   };
 
@@ -56,19 +56,6 @@ export function AlertDialog({ message = '', confirmText = '확인', onConfirm })
  * @param {string} [confirmText="확인"] - 확인 버튼 텍스트
  * @returns {Promise<void>}
  */
-export function showAlert(message, confirmText = '확인') {
-  return new Promise(resolve => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-
-    const root = ReactDOM.createRoot(container);
-
-    const handleConfirm = () => {
-      root.unmount();
-      document.body.removeChild(container);
-      resolve();
-    };
-
-    root.render(<AlertDialog message={message} confirmText={confirmText} onConfirm={handleConfirm} />);
-  });
+export async function showAlert(message, confirmText = '확인') {
+  await renderDialog(<AlertDialog message={message} confirmText={confirmText} />);
 }

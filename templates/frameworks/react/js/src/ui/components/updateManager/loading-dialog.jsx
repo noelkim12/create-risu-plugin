@@ -3,12 +3,26 @@
  * 업데이트 처리 중 표시되는 로딩 다이얼로그 컴포넌트
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import React, { useEffect } from 'react';
 
+import { renderDialog } from '../../utils/dialog-root.js';
 import { updateDialogStyles as s } from '../../styles/index.js';
 
-export function LoadingDialog({ message = '업데이트를 처리하고 있습니다...' }) {
+export function LoadingDialog({
+  message = '업데이트를 처리하고 있습니다...',
+  duration = 3000,
+  onDialogComplete,
+}) {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (onDialogComplete) {
+        onDialogComplete();
+      }
+    }, duration);
+
+    return () => clearTimeout(timer);
+  }, [duration, onDialogComplete]);
+
   return (
     <div className={s.udRoot} role="dialog" aria-modal="true" aria-busy="true">
       <div className={`${s.udCard} ${s.udLoading}`} data-loading-card>
@@ -36,18 +50,6 @@ export function LoadingDialog({ message = '업데이트를 처리하고 있습�
  * @param {number} [duration=3000] - 표시 시간 (밀리초)
  * @returns {Promise<void>}
  */
-export function showLoading(message = '업데이트를 처리하고 있습니다...', duration = 3000) {
-  return new Promise(resolve => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-
-    const root = ReactDOM.createRoot(container);
-    root.render(<LoadingDialog message={message} />);
-
-    setTimeout(() => {
-      root.unmount();
-      document.body.removeChild(container);
-      resolve();
-    }, duration);
-  });
+export async function showLoading(message = '업데이트를 처리하고 있습니다...', duration = 3000) {
+  await renderDialog(<LoadingDialog message={message} duration={duration} />);
 }

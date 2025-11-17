@@ -14,7 +14,7 @@ export function vitePluginDevMode(options = {}) {
     portFilePath = path.resolve(process.cwd(), '.dev-server-port'),
     outputFilePath = path.resolve(process.cwd(), 'src/core/dev-reload.js'),
     useCaddy = false,
-    caddyDomain = ''
+    caddyDomain = '',
   } = options;
 
   let isDevelopment = false;
@@ -46,7 +46,7 @@ export function vitePluginDevMode(options = {}) {
       // .dev-server-port 파일 변경 감지
       server.watcher.add(portFilePath);
 
-      server.watcher.on('change', (file) => {
+      server.watcher.on('change', file => {
         if (file === portFilePath) {
           console.log('🔌 dev-server-port changed, regenerating dev-reload.js...');
           generateDevReloadFile();
@@ -54,7 +54,7 @@ export function vitePluginDevMode(options = {}) {
           server.ws.send({ type: 'full-reload' });
         }
       });
-    }
+    },
   };
 
   function generateDevReloadFile() {
@@ -67,9 +67,7 @@ export function vitePluginDevMode(options = {}) {
       }
 
       // WebSocket URL 생성 (Caddy 사용 시 wss://{domain}/ws, 아니면 ws://localhost:{port})
-      const wsUrl = useCaddy && caddyDomain
-        ? `wss://${caddyDomain}/ws`
-        : `ws://localhost:${port}`;
+      const wsUrl = useCaddy && caddyDomain ? `wss://${caddyDomain}/ws` : `ws://localhost:${port}`;
 
       // src/core/dev-reload.js 생성 (webpack 버전과 동일한 기능)
       const devReloadContent = `/**

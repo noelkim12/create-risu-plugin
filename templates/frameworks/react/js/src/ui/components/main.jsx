@@ -1,19 +1,20 @@
 import React, { useEffect, useRef } from 'react';
 
 import { PLUGIN_NAME } from '../../constants';
+import { useInitialization } from '../contexts/InitializationContext.jsx';
 
 // 메인 애플리케이션 컴포넌트
-export function App({ risuAPI }) {
+export function App() {
+  const { risuAPI, isReady } = useInitialization();
   const observerRef = useRef(null);
 
   // UI 초기화 및 Observer 시작
   useEffect(() => {
-    if (!risuAPI) {
-      console.log(`[${PLUGIN_NAME}] RisuAPI is not initialized`);
+    if (!isReady || !risuAPI) {
       return;
     }
 
-    console.log(`[${PLUGIN_NAME}] plugin loaded`);
+    console.log(`[${PLUGIN_NAME}] plugin started`);
 
     // Observer 시작
     startObserver();
@@ -22,10 +23,10 @@ export function App({ risuAPI }) {
     return () => {
       if (observerRef.current) {
         observerRef.current.disconnect();
-        console.log(`${PLUGIN_NAME} 언로드`);
+        console.log(`${PLUGIN_NAME} observer stopped`);
       }
     };
-  }, [risuAPI]);
+  }, [risuAPI, isReady]);
 
   /**
    * Observer 예시

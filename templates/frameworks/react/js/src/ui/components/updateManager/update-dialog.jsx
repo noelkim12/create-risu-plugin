@@ -7,19 +7,11 @@ import React, { useEffect, useRef } from 'react';
 
 import { updateDialogStyles as s } from '../../styles/index.js';
 
-export function UpdateDialog({
-  name = '',
-  currentVersion = '0.0.0',
-  version = '0.0.0',
-  releasedAt = new Date().toISOString(),
-  mandatory = false,
-  notes = [],
-  title = '플러그인 업데이트 준비 완료',
-  btnUpdate = '지금 업데이트',
-  btnLater = '나중에',
-  btnSkip = '이번 버전 건너뛰기',
-  onAction,
-}) {
+export function UpdateDialog({ info, texts, onDialogComplete }) {
+  // 도메인 객체 destructuring
+  const { name, currentVersion, latestVersion, releasedAt, mandatory, notes } = info;
+  const { title, primary, later, skip } = texts;
+
   const updateButtonRef = useRef(null);
 
   // 포커스 설정 및 키보드 이벤트 리스너
@@ -48,12 +40,12 @@ export function UpdateDialog({
     const detail = { action };
 
     if (action === 'skip') {
-      detail.skipVersion = version;
+      detail.skipVersion = latestVersion;
     }
 
     // 콜백 함수 호출
-    if (onAction) {
-      onAction(detail);
+    if (onDialogComplete) {
+      onDialogComplete(detail);
     }
   };
 
@@ -82,12 +74,7 @@ export function UpdateDialog({
       : [<li key="default">세부 변경사항은 릴리스 노트를 참고해주세요</li>];
 
   return (
-    <div
-      className={s.udRoot}
-      role="dialog"
-      aria-modal="true"
-      onClick={handleBackgroundClick}
-    >
+    <div className={s.udRoot} role="dialog" aria-modal="true" onClick={handleBackgroundClick}>
       <div className={s.udCard} data-update-card>
         <div className={s.udTitle}>
           <h3>
@@ -95,7 +82,7 @@ export function UpdateDialog({
             {name ? ` · ${name}` : ''}
           </h3>
           <span className={s.udPill}>
-            v{currentVersion} → v{version}
+            v{currentVersion} → v{latestVersion}
           </span>
         </div>
         <div className={s.udSub}>
@@ -107,12 +94,12 @@ export function UpdateDialog({
         <div className={s.udActions}>
           {!mandatory && (
             <button className={s.udBtnGhost} onClick={() => handleAction('later')}>
-              {btnLater}
+              {later}
             </button>
           )}
           {!mandatory && (
             <button className={s.udBtnGhost} onClick={() => handleAction('skip')}>
-              {btnSkip}
+              {skip}
             </button>
           )}
           <button
@@ -120,7 +107,7 @@ export function UpdateDialog({
             className={s.udBtnPrimary}
             onClick={() => handleAction('update')}
           >
-            {btnUpdate}
+            {primary}
           </button>
         </div>
       </div>

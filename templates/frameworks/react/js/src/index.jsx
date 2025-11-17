@@ -1,95 +1,79 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 
 import './ui/styles';
 
 import { PLUGIN_NAME, PLUGIN_VERSION } from './constants.js';
-import { RisuAPI } from './core/risu-api.js';
-import { checkForUpdates } from './core/update-manager.js';
+import { ensureRootContainer, cleanupRootContainer } from './core/initialization-core.js';
+import { InitializationProvider, useInitialization } from './ui/contexts/InitializationContext.jsx';
+import { UpdateProvider, useUpdateManager } from './ui/contexts/UpdateContext.jsx';
+import { cleanupDialogRoot } from './ui/utils/dialog-root.js';
 import { App } from './ui/components/main.jsx';
 
 const ROOT_ID = 'risu-plugin-root';
 
 /**
- * 개발 도구 설정
+ * UpdateChecker Component
+ * 앱 시작 시 자동으로 업데이트 체크
  */
-async function setupDevTools() {
-  if (!__DEV_MODE__) return;
+function UpdateChecker() {
+  const { checkForUpdates } = useUpdateManager();
 
-  try {
-    const { initHotReload } = await import('./core/dev-reload.js');
-    initHotReload();
-    console.log(`[${PLUGIN_NAME}] 🔥 Hot Reload enabled`);
-  } catch (error) {
-    console.warn('[App] Hot reload initialization failed:', error);
-  }
+  useEffect(() => {
+    checkForUpdates({
+      pluginName: PLUGIN_NAME,
+      currentVersion: PLUGIN_VERSION,
+      silent: true,
+    }).catch(err => {
+      console.warn('[UpdateChecker] Update check failed:', err);
+    });
+  }, [checkForUpdates]);
+
+  return null;
 }
 
 /**
- * RisuAPI 초기화
- * @returns {Promise<RisuAPI|null>}
+ * Cleanup Component
+ * risuAPI unload 시 정리 작업 수행
  */
-async function initRisuApi() {
-  const risuAPI = RisuAPI.getInstance(globalThis.__pluginApis__);
-  const initialized = await risuAPI.initialize();
+function Cleanup({ container, root }) {
+  const { risuAPI, isReady } = useInitialization();
 
-  if (!initialized) {
-    console.error(`[${PLUGIN_NAME}] Failed to initialize RisuAPI`);
-    return null;
-  }
+  useEffect(() => {
+    if (!isReady || !risuAPI) return;
 
-  return risuAPI;
-}
+    risuAPI.onUnload(() => {
+      root.unmount();
+      cleanupDialogRoot();
+      cleanupRootContainer(container);
+    });
+  }, [risuAPI, isReady, container, root]);
 
-/**
- * React 루트 컨테이너 준비
- * @returns {HTMLElement}
- */
-function ensureRootContainer() {
-  let el = document.getElementById(ROOT_ID);
-  if (!el) {
-    el = document.createElement('div');
-    el.id = ROOT_ID;
-    document.body.appendChild(el);
-  }
-  return el;
+  return null;
 }
 
 /**
  * 애플리케이션 진입점
  */
-async function main() {
-  try {
-    await setupDevTools();
+function main() {
+  const container = ensureRootContainer(ROOT_ID);
+  const root = ReactDOM.createRoot(container);
 
-    const risuAPI = await initRisuApi();
-    if (!risuAPI) return;
-
-    // 업데이트 체크는 사이드이펙트라 fire-and-forget
-    checkForUpdates({ silent: true }).catch(err => {
-      console.warn('[App] Update check failed:', err);
-    });
-
-    const container = ensureRootContainer();
-    const root = ReactDOM.createRoot(container);
-
-    root.render(
-      <React.StrictMode>
-        <App risuAPI={risuAPI} />
-      </React.StrictMode>,
-    );
-
-    console.log(`${PLUGIN_NAME} v${PLUGIN_VERSION} loaded`);
-
-    risuAPI.onUnload(() => {
-      root.unmount();
-      if (container.parentNode) {
-        container.parentNode.removeChild(container);
-      }
-    });
-  } catch (error) {
-    console.error(`[${PLUGIN_NAME}] Initialization failed:`, error);
-  }
+  root.render(
+    <React.StrictMode>
+      <InitializationProvider
+        pluginName={PLUGIN_NAME}
+        pluginVersion={PLUGIN_VERSION}
+        isDev={__DEV_MODE__}
+      >
+        <UpdateProvider>
+          <UpdateChecker />
+          <Cleanup container={container} root={root} />
+          <App />
+        </UpdateProvider>
+      </InitializationProvider>
+    </React.StrictMode>,
+  );
 }
 
 main();
