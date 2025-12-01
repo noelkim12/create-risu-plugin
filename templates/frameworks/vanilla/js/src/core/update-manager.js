@@ -59,7 +59,8 @@ async function fetchLatestManifest() {
       released_at: releaseData.released_at || new Date().toISOString(),
     };
   } catch (error) {
-    console.error('[UpdateManager] Failed to fetch manifest:', error);
+    // npm에 publish되지 않은 경우 정상적으로 fetch 실패할 수 있음
+    console.log(`[${PLUGIN_NAME}] Update check skipped: Plugin not published to npm yet`);
     return null;
   }
 }
@@ -296,8 +297,8 @@ export async function checkForUpdates(options = {}) {
     const manifest = await fetchLatestManifest();
 
     if (!manifest) {
-      if (!silent) console.log('[UpdateManager] Unable to check for updates');
-      return { available: false, error: 'fetch_failed' };
+      // npm에 publish되지 않은 경우 조용히 스킵
+      return { available: false, skipped: true };
     }
 
     const currentVersion = PLUGIN_VERSION;

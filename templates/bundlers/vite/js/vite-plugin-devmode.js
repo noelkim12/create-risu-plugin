@@ -17,6 +17,16 @@ export function vitePluginDevMode(options = {}) {
     caddyDomain = ''
   } = options;
 
+  // Read plugin name from package.json for log identification
+  let pluginName = 'unknown-plugin';
+  try {
+    const pkgPath = path.resolve(process.cwd(), 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    pluginName = pkg.name || 'unknown-plugin';
+  } catch (error) {
+    console.warn('[vite-plugin-devmode] Failed to read package.json:', error.message);
+  }
+
   let isDevelopment = false;
 
   return {
@@ -34,7 +44,7 @@ export function vitePluginDevMode(options = {}) {
         // 프로덕션 빌드 시 dev-reload.js 삭제
         if (fs.existsSync(outputFilePath)) {
           fs.unlinkSync(outputFilePath);
-          console.log('🗑️  Removed dev-reload.js (production build)');
+          console.log(`[${pluginName}:vite-plugin-devmode] 🗑️  Removed dev-reload.js (production build)`);
         }
       }
     },
@@ -48,7 +58,7 @@ export function vitePluginDevMode(options = {}) {
 
       server.watcher.on('change', (file) => {
         if (file === portFilePath) {
-          console.log('🔌 dev-server-port changed, regenerating dev-reload.js...');
+          console.log(`[${pluginName}:vite-plugin-devmode] 🔌 dev-server-port changed, regenerating dev-reload.js...`);
           generateDevReloadFile();
           // HMR 트리거
           server.ws.send({ type: 'full-reload' });
@@ -82,11 +92,12 @@ export function vitePluginDevMode(options = {}) {
  */
 
 import { parsePluginScript, scriptUpdater } from './script-updater.js';
-
+import { PLUGIN_NAME } from '../constants.js';
 const DEV_SERVER_URL = '${wsUrl}';
 const MAX_RECONNECT_DELAY = 30000; // 30 seconds
 const INITIAL_RECONNECT_DELAY = 1000; // 1 second
 const MAX_ERROR_LOGS = 3; // Maximum error logs to display
+const MAX_RECONNECT_ATTEMPTS = 3; // Stop reconnecting after 3 attempts
 
 class HotReloadClient {
   constructor() {
@@ -102,18 +113,18 @@ class HotReloadClient {
    */
   connect() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      console.log('[HotReload] Already connected');
+      console.log(\`[\${PLUGIN_NAME}:HotReload] Already connected\`);
       return;
     }
 
     try {
       if (this.errorLogCount < MAX_ERROR_LOGS) {
-        console.log('[HotReload] Connecting to dev server:', DEV_SERVER_URL);
+        console.log(\`[\${PLUGIN_NAME}:HotReload] Connecting to dev server:\`, DEV_SERVER_URL);
       }
       this.ws = new WebSocket(DEV_SERVER_URL);
 
       this.ws.onopen = () => {
-        console.log('[HotReload] ✅ Connected to dev server');
+        console.log(\`[\${PLUGIN_NAME}:HotReload] ✅ Connected to dev server\`);
         this.reconnectAttempts = 0; // Reset on successful connection
         this.errorLogCount = 0; // Reset error log count on successful connection
       };
@@ -124,10 +135,10 @@ class HotReloadClient {
 
       this.ws.onclose = (event) => {
         if (this.errorLogCount < MAX_ERROR_LOGS) {
-          console.log(\`[HotReload] Disconnected (code: \${event.code}, reason: \${event.reason || 'unknown'})\`);
+          console.log(\`[\${PLUGIN_NAME}:HotReload] Disconnected (code: \${event.code}, reason: \${event.reason || 'unknown'})\`);
           this.errorLogCount++;
         } else if (this.errorLogCount === MAX_ERROR_LOGS) {
-          console.log('[HotReload] Connection errors suppressed (max logs reached). Retrying silently...');
+          console.log(\`[\${PLUGIN_NAME}:HotReload] Connection errors suppressed (max logs reached). Retrying silently...\`);
           this.errorLogCount++;
         }
 
@@ -137,14 +148,14 @@ class HotReloadClient {
       };
 
       this.ws.onerror = (error) => {
-        if (this.errorLogCount < MAX_ERROR_LOGS) {
-          console.error('[HotReload] WebSocket error:', error.message || error);
-        }
+        // Silently handle WebSocket errors during development
+        // Connection issues are expected when dev server is not running
       };
 
     } catch (error) {
+      // Silently handle connection failures during development
+      // Connection issues are expected when dev server is not running
       if (this.errorLogCount < MAX_ERROR_LOGS) {
-        console.error('[HotReload] Connection failed:', error);
         this.errorLogCount++;
       }
       this.scheduleReconnect();
@@ -161,11 +172,11 @@ class HotReloadClient {
 
       switch (message.type) {
         case 'connected':
-          console.log('[HotReload] Server message:', message.message);
+          console.log(\`[\${PLUGIN_NAME}:HotReload] Server message:\`, message.message);
           break;
 
         case 'reload':
-          console.log(\`[HotReload] 📦 Update received (\${message.file}, \${message.size} bytes)\`);
+          console.log(\`[\${PLUGIN_NAME}:HotReload] 📦 Update received (\${message.file}, \${message.size} bytes)\`);
           this.handleReload(message.scriptContent);
           break;
 
@@ -174,10 +185,10 @@ class HotReloadClient {
           break;
 
         default:
-          console.warn('[HotReload] Unknown message type:', message.type);
+          console.warn(\`[\${PLUGIN_NAME}:HotReload] Unknown message type:\`, message.type);
       }
     } catch (error) {
-      console.error('[HotReload] Failed to parse message:', error);
+      console.error(\`[\${PLUGIN_NAME}:HotReload] Failed to parse message:\`, error);
     }
   }
 
@@ -193,7 +204,7 @@ class HotReloadClient {
       const match = scriptContent.match(bannerRegex);
       return match ? match[1].trim() : null;
     } catch (error) {
-      console.error('[HotReload] Failed to extract plugin name:', error);
+      console.error(\`[\${PLUGIN_NAME}:HotReload] Failed to extract plugin name:\`, error);
       return null;
     }
   }
@@ -204,21 +215,21 @@ class HotReloadClient {
    */
   async handleReload(scriptContent) {
     try {
-      console.log('[HotReload] 🔄 Parsing updated script...');
+      console.log(\`[\${PLUGIN_NAME}:HotReload] 🔄 Parsing updated script...\`);
 
       // Security Check: Verify plugin name matches
       const receivedPluginName = this.extractPluginName(scriptContent);
-      const currentPluginName = '__PLUGIN_NAME__';
+      const currentPluginName = PLUGIN_NAME;
 
       if (!receivedPluginName) {
-        console.error('[HotReload] ❌ Security Check Failed: No plugin name found in received script');
+        console.error(\`[\${PLUGIN_NAME}:HotReload] ❌ Security Check Failed: No plugin name found in received script\`);
         this.showToast('❌ Security Check Failed: Invalid script format', 'error');
         return;
       }
 
       if (receivedPluginName !== currentPluginName) {
         console.error(
-          \`[HotReload] ❌ Security Check Failed: Plugin name mismatch\\n\` +
+          \`[\${PLUGIN_NAME}:HotReload] ❌ Security Check Failed: Plugin name mismatch\\n\` +
           \`  Expected: \${currentPluginName}\\n\` +
           \`  Received: \${receivedPluginName}\`
         );
@@ -229,25 +240,25 @@ class HotReloadClient {
         return;
       }
 
-      console.log(\`[HotReload] ✅ Security Check Passed: Plugin name verified (\${currentPluginName})\`);
+      console.log(\`[\${PLUGIN_NAME}:HotReload] ✅ Security Check Passed: Plugin name verified (\${currentPluginName})\`);
 
       // Parse using existing script-updater logic
       const parsed = parsePluginScript(scriptContent);
 
-      console.log('[HotReload] 🔄 Updating plugin...');
+      console.log(\`[\${PLUGIN_NAME}:HotReload] 🔄 Updating plugin...\`);
       const result = await scriptUpdater(parsed);
 
       if (result.success) {
-        console.log('[HotReload] ✅ Plugin updated successfully');
+        console.log(\`[\${PLUGIN_NAME}:HotReload] ✅ Plugin updated successfully\`);
 
         // Show toast notification instead of auto-reload
         this.showToast('🔥 Hot Reload Complete!', 'success');
       } else {
-        console.error('[HotReload] ❌ Plugin update failed:', result.error);
+        console.error(\`[\${PLUGIN_NAME}:HotReload] ❌ Plugin update failed:\`, result.error);
         this.showToast(\`❌ Hot Reload Failed: \${result.error?.message || 'Unknown error'}\`, 'error');
       }
     } catch (error) {
-      console.error('[HotReload] ❌ Reload failed:', error);
+      console.error(\`[\${PLUGIN_NAME}:HotReload] ❌ Reload failed:\`, error);
       this.showToast(\`❌ Hot Reload Error: \${error.message}\`, 'error');
     }
   }
@@ -313,6 +324,14 @@ class HotReloadClient {
       clearTimeout(this.reconnectTimeout);
     }
 
+    // Stop reconnecting after MAX_RECONNECT_ATTEMPTS
+    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      if (this.errorLogCount < MAX_ERROR_LOGS) {
+        console.log(\`[\${PLUGIN_NAME}:HotReload] Max reconnection attempts reached. Stopped retrying.\`);
+      }
+      return;
+    }
+
     // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
     const delay = Math.min(
       INITIAL_RECONNECT_DELAY * Math.pow(2, this.reconnectAttempts),
@@ -320,7 +339,7 @@ class HotReloadClient {
     );
 
     if (this.errorLogCount < MAX_ERROR_LOGS) {
-      console.log(\`[HotReload] Reconnecting in \${delay / 1000}s... (attempt \${this.reconnectAttempts + 1})\`);
+      console.log(\`[\${PLUGIN_NAME}:HotReload] Reconnecting in \${delay / 1000}s... (attempt \${this.reconnectAttempts + 1})\`);
     }
 
     this.reconnectTimeout = setTimeout(() => {
@@ -353,7 +372,7 @@ class HotReloadClient {
       this.ws = null;
     }
 
-    console.log('[HotReload] Disconnected');
+    console.log(\`[\${PLUGIN_NAME}:HotReload] Disconnected\`);
   }
 }
 
@@ -365,11 +384,11 @@ let hotReloadClient = null;
  */
 export function initHotReload() {
   if (hotReloadClient) {
-    console.log('[HotReload] Already initialized');
+    console.log(\`[\${PLUGIN_NAME}:HotReload] Already initialized\`);
     return hotReloadClient;
   }
 
-  console.log('[HotReload] 🔥 Initializing hot reload client...');
+  console.log(\`[\${PLUGIN_NAME}:HotReload] 🔥 Initializing hot reload client...\`);
   hotReloadClient = new HotReloadClient();
   hotReloadClient.connect();
 
@@ -408,9 +427,9 @@ export function stopHotReload() {
       }
 
       fs.writeFileSync(outputFilePath, devReloadContent, 'utf-8');
-      console.log(`✅ Generated dev-reload.js (${wsUrl})`);
+      console.log(`[${pluginName}:vite-plugin-devmode] ✅ Generated dev-reload.js (${wsUrl})`);
     } catch (error) {
-      console.error('❌ Failed to generate dev-reload.js:', error);
+      console.error(`[${pluginName}:vite-plugin-devmode] ❌ Failed to generate dev-reload.js:`, error);
     }
   }
 }
