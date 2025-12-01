@@ -182,12 +182,54 @@ class HotReloadClient {
   }
 
   /**
+   * Extract plugin name from banner
+   * @param {string} scriptContent - Script content
+   * @returns {string|null} - Plugin name or null
+   */
+  extractPluginName(scriptContent) {
+    try {
+      // Extract banner name from script content
+      const bannerRegex = /\\/\\/@name (.+?)\\n/;
+      const match = scriptContent.match(bannerRegex);
+      return match ? match[1].trim() : null;
+    } catch (error) {
+      console.error('[HotReload] Failed to extract plugin name:', error);
+      return null;
+    }
+  }
+
+  /**
    * Handle script reload
    * @param {string} scriptContent - Updated script content
    */
   async handleReload(scriptContent) {
     try {
       console.log('[HotReload] 🔄 Parsing updated script...');
+
+      // Security Check: Verify plugin name matches
+      const receivedPluginName = this.extractPluginName(scriptContent);
+      const currentPluginName = '__PLUGIN_NAME__';
+
+      if (!receivedPluginName) {
+        console.error('[HotReload] ❌ Security Check Failed: No plugin name found in received script');
+        this.showToast('❌ Security Check Failed: Invalid script format', 'error');
+        return;
+      }
+
+      if (receivedPluginName !== currentPluginName) {
+        console.error(
+          \`[HotReload] ❌ Security Check Failed: Plugin name mismatch\\n\` +
+          \`  Expected: \${currentPluginName}\\n\` +
+          \`  Received: \${receivedPluginName}\`
+        );
+        this.showToast(
+          \`❌ Security Check Failed: Wrong plugin (\${receivedPluginName})\`,
+          'error'
+        );
+        return;
+      }
+
+      console.log(\`[HotReload] ✅ Security Check Passed: Plugin name verified (\${currentPluginName})\`);
 
       // Parse using existing script-updater logic
       const parsed = parsePluginScript(scriptContent);

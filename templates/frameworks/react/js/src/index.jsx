@@ -5,7 +5,7 @@ import './ui/styles';
 
 import { PLUGIN_NAME, PLUGIN_VERSION } from './constants.js';
 import { RisuAPI } from './core/risu-api.js';
-import { checkForUpdates } from './core/update-manager.js';
+import { checkForUpdates } from './core/update-manager.jsx';
 import { App } from './ui/components/main.jsx';
 
 const ROOT_ID = 'risu-plugin-root';
@@ -14,14 +14,14 @@ const ROOT_ID = 'risu-plugin-root';
  * 개발 도구 설정
  */
 async function setupDevTools() {
-  if (!__DEV_MODE__) return;
-
-  try {
-    const { initHotReload } = await import('./core/dev-reload.js');
-    initHotReload();
-    console.log(`[${PLUGIN_NAME}] 🔥 Hot Reload enabled`);
-  } catch (error) {
-    console.warn('[App] Hot reload initialization failed:', error);
+  if (__DEV_MODE__) {
+    try {
+      const { initHotReload } = await import('./core/dev-reload.js');
+      initHotReload();
+      console.log(`[${PLUGIN_NAME}] 🔥 Hot Reload enabled`);
+    } catch (error) {
+      console.warn('[App] Hot reload initialization failed:', error);
+    }
   }
 }
 

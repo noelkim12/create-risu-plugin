@@ -21,6 +21,7 @@ const { toKebabCase } = require('./script-util.js');
 const DEFAULT_PORT = 13131;
 const MAX_PORT_ATTEMPTS = 10;
 const PORT_FILE_PATH = path.resolve(__dirname, '../.dev-server-port');
+const DIST_DIR = path.resolve(__dirname, '../dist');
 const DIST_FILE = path.resolve(__dirname, `../dist/${toKebabCase(pkg.name)}.js`);
 
 // State
@@ -149,7 +150,8 @@ function initWebSocketServer(port) {
   savePortToFile(actualPort);
 
   console.log(`\n🚀 [DevServer] WebSocket server started on ws://localhost:${actualPort}`);
-  console.log(`📂 [DevServer] Watching: ${DIST_FILE}\n`);
+  console.log(`📂 [DevServer] Watching: ${DIST_DIR}`);
+  console.log(`📄 [DevServer] Main file: ${path.basename(DIST_FILE)}\n`);
 }
 
 /**
@@ -195,29 +197,48 @@ function broadcastReload() {
  * Initialize file watcher
  */
 function initFileWatcher() {
-  watcher = chokidar.watch(DIST_FILE, {
+  // Watch entire dist directory to catch all file changes
+  watcher = chokidar.watch(DIST_DIR, {
     persistent: true,
     ignoreInitial: true, // Don't trigger on startup
     awaitWriteFinish: {
       stabilityThreshold: 100, // Wait 100ms after last change
       pollInterval: 50,
     },
+    ignored: /node_modules/, // Ignore node_modules if any
   });
 
   watcher.on('change', changedPath => {
-    console.log(`\n📝 [DevServer] File changed: ${path.basename(changedPath)}`);
-    broadcastReload();
+    const fileName = path.basename(changedPath);
+    console.log(`\n📝 [DevServer] File changed: ${fileName}`);
+
+    // Only broadcast if the main dist file changed
+    if (changedPath === DIST_FILE) {
+      broadcastReload();
+    } else {
+      console.log(`[DevServer] Ignoring change to ${fileName} (not main dist file)`);
+    }
+  });
+
+  watcher.on('add', addedPath => {
+    const fileName = path.basename(addedPath);
+    console.log(`\n📝 [DevServer] File added: ${fileName}`);
+
+    // Only broadcast if the main dist file was added
+    if (addedPath === DIST_FILE) {
+      broadcastReload();
+    }
   });
 
   watcher.on('error', error => {
     console.error('[DevServer] Watcher error:', error);
   });
 
-  // Check if file exists
-  if (!fs.existsSync(DIST_FILE)) {
-    console.warn(
-      `⚠️  [DevServer] Warning: ${DIST_FILE} does not exist yet. Waiting for webpack build...`,
-    );
+  // Check if dist directory exists
+  if (!fs.existsSync(DIST_DIR)) {
+    console.warn(`⚠️  [DevServer] Warning: ${DIST_DIR} does not exist yet. Waiting for build...`);
+  } else if (!fs.existsSync(DIST_FILE)) {
+    console.warn(`⚠️  [DevServer] Warning: ${DIST_FILE} does not exist yet. Waiting for build...`);
   }
 }
 
