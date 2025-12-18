@@ -44,10 +44,8 @@ export class RisuAPI {
    */
   async initialize() {
     try {
-      // eval은 최초 스크립트 실행 컨텍스트에서만 작동
-      // 싱글톤이므로 한 번만 실행되고 이후 재사용됨
-      this._getDatabase = eval('getDatabase');
-      this._setDatabaseLite = eval('setDatabaseLite');
+      this._getDatabase = getDatabase;
+      this._setDatabaseLite = setDatabaseLite;
       console.log(`[${PLUGIN_NAME}] RisuAPI initialized successfully`);
       return true;
     } catch (error) {
