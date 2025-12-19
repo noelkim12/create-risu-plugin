@@ -12,7 +12,7 @@
  *   1. 버전 업데이트 (package.json)
  *   2. release-notes.json 업데이트
  *   3. Git commit & tag
- *   4. 빌드 (webpack)
+ *   4. 빌드 (vite)
  *   5. npm publish
  *   6. Git push (tags 포함)
  */
@@ -216,8 +216,8 @@ async function main() {
   } catch (error) {
     console.error('❌ Build failed (빌드 실패)');
     console.log('\n💡 일반적인 문제:');
-    console.log('  1. Webpack 설정 오류');
-    console.log('     → webpack.config.js 문법 오류 확인');
+    console.log('  1. vite 설정 오류');
+    console.log('     → vite.config.js 문법 오류 확인');
     console.log('  2. 의존성 누락');
     console.log('     → npm install');
     console.log('  3. 소스 코드 문법 오류');

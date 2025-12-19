@@ -98,7 +98,7 @@ export default defineConfig({
       formats: ['umd'], // CDN 배포용 즉시 실행 함수
     },
     outDir: 'dist',
-    emptyOutDir: true,
+    emptyOutDir: false,
     sourcemap: false, // 프로덕션에서는 false
 
     rollupOptions: {

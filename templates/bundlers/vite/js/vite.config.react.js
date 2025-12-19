@@ -100,7 +100,7 @@ export default defineConfig({
       formats: ['umd'], // CDN 배포용 UMD 포맷 (React 포함)
     },
     outDir: 'dist',
-    emptyOutDir: true,
+    emptyOutDir: false,
     sourcemap: false, // 프로덕션에서는 false
 
     rollupOptions: {
