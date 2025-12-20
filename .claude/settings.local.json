@@ -5,7 +5,8 @@
       "Bash(test:*)",
       "Bash(node --version)",
       "Bash(node test-imports.js:*)",
-      "Bash(npm install)"
+      "Bash(npm install)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []

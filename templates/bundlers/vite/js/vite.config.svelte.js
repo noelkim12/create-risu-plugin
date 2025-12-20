@@ -1,18 +1,19 @@
 /**
- * Vite 설정 파일 (React + JavaScript)
+ * Vite 설정 파일 (Svelte)
  *
  * 일반적인 작성 규칙:
  * 1. build.lib: 라이브러리 모드로 빌드 설정
- * 2. build.lib.formats: CDN 배포용 'umd' 형식 사용
- * 3. plugins: React 플러그인 및 필요한 플러그인들을 배열로 추가
+ * 2. build.lib.formats: CDN 배포용 'iife' 형식 사용
+ * 3. plugins: 필요한 플러그인들을 배열로 추가
  * 4. css: CSS Modules 설정
  */
 
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import path from 'path';
 import fs from 'fs';
+import path from 'path';
+import { defineConfig } from 'vite';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 import cssInjectedByJsPlugin from 'vite-plugin-css-injected-by-js';
+
 import { vitePluginArgs } from './scripts/vite-plugin-args.js';
 import { vitePluginDevMode } from './scripts/vite-plugin-devmode.js';
 
@@ -21,11 +22,11 @@ const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf-8'));
 
 // 유틸리티 함수들 (임시로 여기 정의, 추후 별도 파일로 분리)
 function toCamelCase(str) {
-  return str.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+  return str.replace(/-([a-z])/g, g => g[1].toUpperCase());
 }
 
 function toKebabCase(str) {
-  return str.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase()).replace(/^-/, '');
+  return str.replace(/[A-Z]/g, m => '-' + m.toLowerCase()).replace(/^-/, '');
 }
 
 // Plugin Args 읽기
@@ -41,9 +42,7 @@ function getPluginArgs() {
       }
 
       // 각 arg를 "//@arg {name} {type}" 형식으로 변환
-      return data.args
-        .map(arg => `//@arg ${arg.name} ${arg.type}`)
-        .join('\n');
+      return data.args.map(arg => `//@arg ${arg.name} ${arg.type}`).join('\n');
     } catch (error) {
       console.warn('Failed to read plugin-args.json:', error);
       return '';
@@ -86,7 +85,7 @@ ${getDevModeBanner()}
           file.code = banner + file.code;
         }
       }
-    }
+    },
   };
 }
 
@@ -94,7 +93,7 @@ export default defineConfig({
   // 라이브러리 빌드 설정
   build: {
     lib: {
-      entry: path.resolve(__dirname, 'src/index.jsx'),
+      entry: path.resolve(__dirname, 'src/index.js'),
       name: toCamelCase(pkg.name), // 전역 변수명 (camelCase)
       fileName: () => `${toKebabCase(pkg.name)}.js`, // 출력 파일명 (kebab-case)
       formats: ['umd'], // CDN 배포용 UMD 포맷 (React 포함)
@@ -111,24 +110,6 @@ export default defineConfig({
         // 전역 변수명 설정
         name: toCamelCase(pkg.name),
       },
-
-      // 🚀 eval 경고 무시 (risu-api.js에서 필수적으로 사용)
-      onwarn(warning, warn) {
-        // eval 사용 경고 무시
-        if (warning.code === 'EVAL' || (warning.message && warning.message.includes('Use of eval'))) {
-          return;
-        }
-        warn(warning);
-      },
-
-      // 🚀 병렬 처리 최적화
-      maxParallelFileOps: 20,
-
-      // 🚀 Tree shaking 최적화
-      treeshake: {
-        preset: 'recommended',
-        moduleSideEffects: false
-      }
     },
 
     // 🚀 Terser 최적화 설정 (속도와 크기 밸런스)
@@ -139,60 +120,46 @@ export default defineConfig({
         passes: 1, // 2→1로 줄여서 속도 향상 (압축률 약간 감소)
         pure_funcs: ['console.debug'], // 불필요한 함수 제거
         drop_debugger: true,
-        // eval은 보존
-        pure_getters: false,
-        keep_fargs: false,
-        unsafe_arrows: true,
-        unsafe_methods: true
       },
       mangle: {
         safari10: true,
-        toplevel: true
+        toplevel: true,
       },
       format: {
         comments: false,
-        ecma: 2015
+        ecma: 2015,
       },
-      // 🚀 병렬 처리로 속도 향상
-      parallel: false
     },
-
-    // 🚀 CommonJS 최적화
-    commonjsOptions: {
-      transformMixedEsModules: true,
-      esmExternals: true
-    },
-
-    // 청크 크기 경고 비활성화
-    chunkSizeWarningLimit: 1000,
 
     // Watch 모드 설정 (build --watch 시 사용)
-    watch: process.argv.includes('--watch') ? {
-      // 자동 생성 파일 무시 (무한 루프 방지)
-      exclude: [
-        '**/src/core/plugin-config.js',
-        '**/src/core/dev-reload.js',
-        '**/node_modules/**'
-      ],
-      // 🚀 chokidar 최적화
-      chokidar: {
-        usePolling: false,
-        interval: 100
-      }
-    } : null,
+    watch: process.argv.includes('--watch')
+      ? {
+          // 자동 생성 파일 무시 (무한 루프 방지)
+          exclude: [
+            '**/src/core/plugin-config.js',
+            '**/src/core/dev-reload.js',
+            '**/node_modules/**',
+          ],
+          // 🚀 chokidar 최적화
+          chokidar: {
+            usePolling: false,
+            interval: 100,
+          },
+        }
+      : null,
   },
 
   // CSS Modules 설정
   css: {
     modules: {
       localsConvention: 'camelCase',
-      generateScopedName: '[name]__[local]--[hash:base64:5]'
-    }
+      generateScopedName: '[name]__[local]--[hash:base64:5]',
+    },
   },
 
   // 모듈 해석 설정
   resolve: {
-    extensions: ['.js', '.jsx', '.ts', '.tsx', '.css']
+    extensions: ['.js', '.svelte', '.ts', '.css'],
   },
 
   // 개발 서버 설정 (Vite는 자체 HMR 제공)
@@ -208,9 +175,6 @@ export default defineConfig({
         '**/src/core/dev-reload.js',
         '**/node_modules/**',
       ],
-      // 🚀 chokidar 최적화
-      usePolling: false,
-      interval: 100
     },
   },
 
@@ -221,30 +185,27 @@ export default defineConfig({
     __PLUGIN_DESCRIPTION__: JSON.stringify(pkg.description),
     __DEV_MODE__: JSON.stringify(process.env.NODE_ENV === 'development'),
     // 브라우저 환경용: process.env.NODE_ENV를 문자열로 치환
-    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production')
+    'process.env.NODE_ENV': JSON.stringify(
+      process.env.NODE_ENV || 'production',
+    ),
   },
-
-  // 🚀 의존성 최적화 (캐싱)
-  optimizeDeps: {
-    include: ['react', 'react-dom', 'idb'],
-    force: false, // 캐시 사용
-  },
-
-  // 🚀 캐시 디렉토리 명시
-  cacheDir: 'node_modules/.vite',
 
   // 플러그인
   plugins: [
-    // 🚀 React 플러그인 최적화 (JSX 변환 및 Fast Refresh)
-    react({
-      // Fast Refresh는 개발 모드에서만
-      fastRefresh: process.env.NODE_ENV === 'development',
-      // Babel 변환 최소화
-      babel: {
-        babelrc: false,
-        configFile: false,
-        plugins: []
-      }
+    // Svelte 플러그인
+    svelte({
+      compilerOptions: {
+        // Svelte 5 runes 모드 활성화
+        runes: true,
+      },
+      // 특정 라이브러리는 레거시 모드로 컴파일 (lucide-svelte 등)
+      dynamicCompileOptions({ filename }) {
+        if (filename.includes('node_modules')) {
+          return { runes: undefined }; // node_modules는 자동 감지
+        }
+      },
+      // CSS를 JS에 포함
+      emitCss: false,
     }),
 
     // CSS를 JS에 인라인으로 삽입 (CDN 배포를 위해 단일 파일로 번들링)
@@ -264,6 +225,6 @@ export default defineConfig({
     }),
 
     // Banner를 최상단에 추가 (CSS injection 이후)
-    viteBannerPlugin()
-  ]
+    viteBannerPlugin(),
+  ],
 });

@@ -1,6 +1,7 @@
 {
   "name": "cdn-test1",
   "version": "0.1.0",
+  "type": "module",
   "description": "Cdn Test1 for RISU AI",
   "main": "src/index.js",
   "browser": "dist/cdn_test1.js",
@@ -11,7 +12,8 @@
   "keywords": [
     "risu-ai",
     "cdn",
-    "plugin"
+    "plugin",
+    "svelte"
   ],
   "author": "Chaebboong",
   "license": "MIT",
@@ -22,21 +24,26 @@
     "dev:vite": "cross-env NODE_ENV=development vite build --watch",
     "build": "vite build",
     "build:dev": "cross-env NODE_ENV=development vite build",
-    "lint": "eslint src --ext .js",
-    "lint:fix": "eslint src --ext .js --fix",
-    "format": "prettier --write \"src/**/*.{js,json,css}\"",
-    "format:check": "prettier --check \"src/**/*.{js,json,css}\"",
+    "lint": "eslint src --ext .js,.svelte",
+    "lint:fix": "eslint src --ext .js,.svelte --fix",
+    "format": "prettier --write \"src/**/*.{js,svelte,json,css}\"",
+    "format:check": "prettier --check \"src/**/*.{js,svelte,json,css}\"",
     "release": "node scripts/release.js",
     "release:minor": "node scripts/release.js -- minor",
     "release:patch": "node scripts/release.js -- patch",
     "release:major": "node scripts/release.js -- major"
   },
   "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "chokidar": "^4.0.3",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
+    "eslint-plugin-svelte": "^2.46.1",
+    "prettier-plugin-svelte": "^3.3.2",
+    "svelte": "^5.16.0",
+    "svelte-eslint-parser": "^0.43.0",
     "terser": "^5.36.0",
-    "vite": "^5.0.0",
+    "vite": "^6.0.0",
     "vite-plugin-css-injected-by-js": "^3.5.0",
     "ws": "^8.18.3"
   },
@@ -44,8 +51,8 @@
     "idb": "^8.0.0"
   },
   "engines": {
-    "node": ">=14.0.0",
-    "npm": ">=6.0.0"
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   },
   "publishConfig": {
     "access": "public"

@@ -262,8 +262,6 @@ export class RisuAPI {
 
   /**
    * 데이터베이스를 가져옵니다.
-   * eval을 통해 전역 컨텍스트에서 가져온 함수입니다.
-   *
    * @returns {any} 데이터베이스 객체
    */
   getDatabase() {
@@ -275,8 +273,6 @@ export class RisuAPI {
 
   /**
    * 데이터베이스 Lite를 설정합니다.
-   * eval을 통해 전역 컨텍스트에서 가져온 함수입니다.
-   *
    * @param {any} data - 설정할 데이터
    */
   setDatabaseLite(data) {
@@ -284,5 +280,36 @@ export class RisuAPI {
       throw new Error('RisuAPI is not initialized. Call initialize() first.');
     }
     return this._setDatabaseLite(data);
+  }
+
+  /**
+   * 현재 채팅 페이지를 가져옵니다.
+   * @returns {number|null}
+   */
+  getCurrentChatPage() {
+    const char = this._getChar();
+    if (char == null) return null;
+    return char.chatPage;
+  }
+
+  /**
+   * 현재 채팅 페이지의 모든 메시지를 가져옵니다.
+   * @returns {Message[]|null}
+   */
+  getAllCurrentChatMessages() {
+    const char = this._getChar();
+    if (char == null) return null;
+    return char.chats[this.getCurrentChatPage()].message;
+  }
+
+  /**
+   * 마지막 채팅 인덱스를 가져옵니다.
+   * @returns {number|null}
+   */
+  getLastChatIndex() {
+    const char = this._getChar();
+    if (char == null) return null;
+
+    return char.chats[this.getCurrentChatPage()].message.length;
   }
 }
