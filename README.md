@@ -1,202 +1,87 @@
 # create-risu-plugin
 
-RisuAI 플러그인 프로젝트를 위한 CLI 스캐폴딩 도구입니다.
+Create a TypeScript Risuai API v3 plugin scaffold for vanilla DOM or Svelte. The generated project uses Vite, renders inside the plugin iframe, and stores plugin data through `risuai.pluginStorage`.
 
-npx로 간단하게 RisuAI 플러그인 프로젝트를 생성하고, Hot Reload 개발 환경, 자동 업데이트 시스템, 버전 관리 등 모든 기능을 즉시 사용할 수 있습니다.
+## What You Get
 
-## ✨ 주요 기능
+- TypeScript-only templates for vanilla and Svelte.
+- Risuai API v3 metadata, including `//@api 3.0` in the built plugin file.
+- Iframe-local settings UI opened with `risuai.showContainer` and closed with `risuai.hideContainer`.
+- Scoped storage helpers built on `pluginStorage`.
+- Read-only current character and chat context helpers.
+- Vite watch and build scripts for manual Risuai import and file-based hot reload.
 
-- 🚀 **npx 원클릭 생성** - 설치 없이 즉시 사용 가능
-- 🔥 **Hot Reload 개발 환경** - 코드 수정 시 자동 반영
-- ⚡ **모던 개발 스택** - Web Components, CSS Modules, Webpack 5
-- 📦 **자동 업데이트 시스템** - unpkg CDN 기반 버전 관리
-- 🎯 **버전 관리 자동화** - 원클릭 릴리스 스크립트
-- ✅ **이름 검증** - kebab-case 플러그인명 자동 검증
-
-## 🚀 빠른 시작 가이드
-
-### 1. 프로젝트 생성
+## Quick Start
 
 ```bash
 npx create-risu-plugin
+cd my-plugin
+npm run dev
 ```
 
-### 2. 대화형 프롬프트
+The CLI asks for a project name, description, package-name check, and framework. Framework choices are `vanilla` and `svelte`. TypeScript is always used.
 
-CLI가 다음 정보를 요청합니다:
+## Risuai v3 Development Flow
 
+1. Run `npm run dev` to start Vite watch mode, or run `npm run build` for a one-time build.
+2. Open Risuai v3 plugin import or file-based hot reload.
+3. Select the built `dist/<plugin-name>.js` file.
+4. In Risuai, click the generated action button. If the button location is hidden by your layout, open the generated settings entry as a fallback.
+5. Confirm the iframe-local panel opens, the open count updates, and the current character or chat context appears when available.
+
+The generated project doesn't run a separate development server. Risuai reads the built JavaScript file you select.
+
+## Generated Project Shape
+
+```text
+my-plugin/
+├── dist/
+│   └── my-plugin.js
+├── src/
+│   ├── main.ts
+│   ├── App.svelte or ui/panel.ts
+│   ├── constants/
+│   │   └── plugin.ts
+│   ├── helpers/
+│   │   ├── chat-context.ts
+│   │   └── plugin-storage.ts
+│   └── types/risuai.d.ts
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+└── README.md
 ```
-🌮 Risu Plugin Scaffold Builder 🥠
 
-? 프로젝트 이름을 입력하세요 (kebab-case, 영문만): my-awesome-plugin
-? 프로젝트 설명을 입력하세요: My Awesome Plugin for RISU AI
-? 어떤 템플릿을 사용하시겠어요?
-  sample : 샘플 템플릿 - 옵저버 기반 버튼 추가를 통한 플러그인 예시를 제공합니다
-```
-
-### 3. 프로젝트 실행
+## Commands
 
 ```bash
-cd my-awesome-plugin
-npm run dev     # 개발 모드 (Hot Reload)
-npm run build   # 프로덕션 빌드
+npm run dev       # build dist/<plugin-name>.js in watch mode
+npm run build     # build once for manual import
+npm run typecheck # check TypeScript
 ```
 
-## 📋 프로젝트 이름 규칙
+## Template Notes
 
-### 플러그인 이름 (kebab-case)
+### Vanilla
 
-- ✅ 올바른 예시: `my-plugin`, `awesome-tool`, `chat-bot-v2`
-- ❌ 잘못된 예시: `MyPlugin`, `my_plugin`, `my plugin`, `-my-plugin`, `my-plugin-`
+The vanilla template registers a visible action button with `registerButton`, keeps a settings entry as a fallback, opens the Risuai plugin iframe, and renders a small DOM panel into the iframe document.
 
-**규칙**:
-- 영문 소문자만 허용 (a-z)
-- 숫자 사용 가능 (0-9)
-- 단어 구분은 하이픈(-) 사용
-- 하이픈으로 시작하거나 끝날 수 없음
-- 생성된 파일명은 자동 변환
+### Svelte
 
-## 📁 자동 생성되는 프로젝트 구조
+The Svelte template registers the same visible action button and settings fallback, mounts `App.svelte` after either entry opens, then unmounts it when Risuai unloads the plugin.
 
-프로젝트 생성 후 자동으로 다음과 같은 구조가 만들어집니다:
+## Optional Update URL
 
-```
-my-awesome-plugin/
-├── dist/                          # 빌드 결과물
-│   ├── my-awesome-plugin.js       # 번들 파일
-│   └── release-notes.json         # 릴리스 정보
-│
-├── docs/                          # 문서
-│   ├── how_to_publish.md          # 배포 가이드
-│   ├── development-guide.md       # 개발 가이드
-│   └── css-modules.md             # CSS Modules 가이드
-│
-├── scripts/                       # 빌드 스크립트
-│   ├── dev-server.js              # WebSocket 개발 서버
-│   ├── webpack-plugin-devmode.js  # 개발 모드 플러그인
-│   ├── webpack-plugin-args.js     # Plugin Args 주입 시스템
-│   ├── release.js                 # 릴리스 자동화
-│   └── script-util.js             # 유틸리티
-│
-├── src/                           # 소스 코드
-│   ├── index.js                   # 메인 엔트리 포인트
-│   ├── constants.js               # 상수 정의
-│   ├── plugin-args.json           # 플러그인 인자 정의
-│   │
-│   ├── core/                      # 핵심 로직
-│   │   ├── risu-api.js            # RisuAPI 래퍼
-│   │   ├── update-manager.js      # 자동 업데이트 시스템
-│   │   └── image-storage.js       # IndexedDB 이미지 저장소
-│   │
-│   ├── ui/                        # UI 컴포넌트
-│   │   ├── styles/                # CSS 모듈
-│   │   └── components/            # Web Components
-│   │
-│   ├── data/                      # 데이터
-│   └── utils/                     # 유틸리티
-│
-├── package.json                   # 패키지 설정
-├── webpack.config.js              # Webpack 설정
-└── README.md                      # 프로젝트 문서
+The default build omits `//@update-url`. If you publish a stable JavaScript file and want Risuai to know where it lives, add the metadata line in `vite.config.ts` yourself:
+
+```ts
+//@update-url https://example.com/my-plugin.js
 ```
 
-## 🛠️ 프로젝트 생성 후 사용 가능한 명령어
+Treat this as an advanced publishing choice. It isn't needed for local file import or file-based hot reload.
 
-### 개발
+## Links
 
-```bash
-npm run dev          # Hot Reload 개발 모드
-npm run dev:server   # WebSocket 서버만 실행
-npm run dev:webpack  # Webpack watch 모드만 실행
-```
-
-### 빌드
-
-```bash
-npm run build        # 프로덕션 빌드
-npm run build:dev    # 개발 모드 빌드
-```
-
-### 릴리스 (버전 관리)
-
-```bash
-npm run release:patch  # 0.1.0 → 0.1.1 (버튼 수정)
-npm run release:minor  # 0.1.0 → 0.2.0 (새 기능)
-npm run release:major  # 0.1.0 → 1.0.0 (Breaking Change)
-```
-
-## 📦 제공되는 템플릿
-
-### Sample 템플릿 (권장)
-
-- 옵저버 기반 버튼 추가 예시
-- UI 컴포넌트 샘플 코드
-- 실전 프로젝트 템플릿
-
-## ⚙️ 기술 스택
-
-생성되는 프로젝트의 기술 스택:
-
-- **빌드**: Webpack 5
-- **UI**: Web Components (Custom Elements)
-- **스타일**: CSS Modules
-- **저장소**: IndexedDB (idb)
-- **개발**: Hot Reload (WebSocket)
-- **배포**: npm + unpkg CDN
-- **인자 시스템**: WinBox (UI 창)
-
-## 📚 추가 문서
-
-생성된 프로젝트의 `docs/` 폴더에서 다음 가이드를 확인할 수 있습니다:
-
-- **개발 가이드** ([`docs/development-guide.md`](templates/sample/docs/development-guide.md))
-  - Web Components 사용법
-  - Custom Elements 생성 방법
-  - 컴포넌트 라이프사이클 관리
-
-- **CSS Modules 가이드** ([`docs/css-modules.md`](templates/sample/docs/css-modules.md))
-  - CSS Modules 사용법
-  - Best Practices
-  - 클래스명 컨벤션
-
-- **배포 가이드** ([`docs/how_to_publish.md`](templates/sample/docs/how_to_publish.md))
-  - npm 배포 프로세스
-  - 릴리스 자동화 사용법
-  - unpkg CDN 설정
-
-## 🔥 Hot Reload 시스템
-
-개발 모드에서는 WebSocket 기반 Hot Reload가 자동으로 활성화됩니다:
-
-1. **파일 감시**: `dist/` 폴더의 변경 자동 감지
-2. **실시간 전송**: WebSocket으로 업데이트 전송
-3. **자동 반영**: RisuAI에서 플러그인 자동 업데이트
-4. **토스트 알림**: 업데이트 성공/실패 알림
-
-**포트 충돌 방지**: 13131 포트가 사용 중이면 자동으로 다음 포트 시도 (최대 10회)
-
-## 📦 자동 업데이트 시스템
-
-생성된 플러그인은 unpkg CDN을 통한 자동 업데이트를 지원합니다:
-
-1. **버전 확인**: 주기적으로 최신 버전 체크
-2. **업데이트 알림**: 새 버전 발견 시 다이얼로그 표시
-3. **원클릭 업데이트**: 사용자 동의 후 자동 업데이트
-4. **릴리스 노트**: 변경 사항 자동 표시
-
-## 🤝 기여하기
-
-이슈와 풀 리퀘스트를 환영합니다!
-
-## 📄 라이선스
-
-MIT License
-
-## 🔗 관련 링크
-
-- [RisuAI](https://github.com/kwaroran/RisuAI)
-- [npm](https://www.npmjs.com/package/create-risu-plugin)
-
----
-
-Made with ❤️ for RisuAI Community
+- [Quickstart](docs/QUICKSTART.md)
+- [Publishing guide](docs/HOW_TO_PUBLISH.md)
+- [Optional hosted file guide](docs/HOW_TO_CDN.md)

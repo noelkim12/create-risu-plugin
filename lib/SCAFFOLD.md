@@ -1,515 +1,105 @@
-# Create-Risu-Plugin 스캐폴드 아키텍처
+# Create Risu Plugin scaffold architecture
 
-프로젝트 생성 CLI의 전체 구조와 워크플로우 문서
+`create-risu-plugin` is a v3-only Risuai plugin scaffold generator. It creates TypeScript projects with Vite, a single plugin bundle, and either a vanilla or Svelte iframe-local UI.
 
-## 📁 디렉토리 구조
+## Directory map
 
-```
+```text
 lib/
-├── createProject.js              # 메인 진입점
-├── core/                         # 핵심 오케스트레이션 레이어
-│   ├── ProjectConfig.js          # 설정 빌더 (Builder 패턴)
-│   └── ProjectGenerator.js       # 생성 오케스트레이터
-├── prompts/                      # 사용자 입력 레이어
-│   ├── basePrompts.js            # 프로젝트명, 설명
-│   ├── frameworkPrompts.js       # 프레임워크, 언어 선택
-│   └── devServerPrompts.js       # WebSocket 포트, Caddy 설정
-├── processors/                   # 비즈니스 로직 레이어
-│   ├── TemplateComposer.js       # 템플릿 파일 작업
-│   ├── DependencyManager.js      # 의존성 조합 및 설치
-│   └── FileProcessor.js          # 파일 처리 유틸리티
-├── updaters/                     # 설정 업데이트 레이어
-│   ├── PackageJsonUpdater.js     # package.json 수정
-│   └── ConfigFileUpdater.js      # vite.config.js, webpack.config.js 업데이트
-└── utils/                        # 유틸리티 레이어
-    ├── validators.js             # 입력값 검증
-    └── messages.js               # CLI 출력 포맷팅
-```
+├── createProject.js
+├── core/
+│   ├── ProjectConfig.js
+│   └── ProjectGenerator.js
+├── prompts/
+│   ├── basePrompts.js
+│   └── frameworkPrompts.js
+├── processors/
+│   ├── DependencyManager.js
+│   ├── FileProcessor.js
+│   └── TemplateComposer.js
+├── updaters/
+│   ├── ConfigFileUpdater.js
+│   └── PackageJsonUpdater.js
+└── utils/
+    ├── messages.js
+    └── validators.js
 
----
-
-## 🔄 워크플로우 개요
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     1. 사용자 입력 단계                          │
-│  createProject.js → prompts/* → ProjectConfig (Builder)         │
-└─────────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                     2. 검증 단계                                │
-│  ProjectGenerator.validate() → config, template, directory      │
-└─────────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                     3. 템플릿 복사 단계                          │
-│  TemplateComposer.copyTemplate() → base + bundler config        │
-└─────────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                     4. 템플릿 파일 처리 단계                     │
-│  FileProcessor.processAllFiles() → 템플릿 변환 (gitignore, caddy)│
-└─────────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                     5. 설정 업데이트 단계                        │
-│  PackageJsonUpdater + ConfigFileUpdater → 사용자 설정 주입      │
-└─────────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                     6. 의존성 설치                               │
-│  DependencyManager.install() → npm install                      │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 📋 상세 컴포넌트 설명
-
-### 1. 진입점 레이어
-
-#### `createProject.js`
-**목적**: 전체 프로젝트 생성 플로우를 조정하는 메인 오케스트레이터
-
-**워크플로우**:
-1. 환영 메시지 표시
-2. 프롬프트를 통해 사용자 입력 수집
-3. Builder 패턴으로 `ProjectConfig` 구성
-4. `ProjectGenerator`에 위임
-5. 성공 메시지 및 다음 단계 안내 표시
-
-**에러 처리**: 모든 에러를 캐치하여 사용자 친화적인 메시지 표시
-
----
-
-### 2. 핵심 레이어
-
-#### `ProjectConfig.js`
-**패턴**: Builder 패턴
-
-**목적**: Fluent API를 제공하는 중앙 집중식 설정 객체
-
-**주요 메서드**:
-- `setProjectName(name)`: 프로젝트명 설정
-- `setDescription(desc)`: 프로젝트 설명 설정
-- `setFramework(framework)`: 프레임워크 설정 (vanilla, react, svelte)
-- `setLanguage(language)`: 언어 설정 (javascript, typescript)
-- `setWebSocketPort(port)`: 개발 서버 WebSocket 포트 설정
-- `setCaddy(useCaddy, domain, email)`: Caddy 설정
-- `validate()`: 모든 설정값 검증
-
-**속성**:
-```javascript
-{
-  projectName: string,        // 프로젝트명
-  description: string,        // 프로젝트 설명
-  framework: 'vanilla' | 'react' | 'svelte',
-  language: 'javascript' | 'typescript',
-  bundler: 'vite' | 'webpack',
-  websocketPort: number,      // WebSocket 포트
-  useCaddy: boolean,          // Caddy 사용 여부
-  caddyDomain: string,        // Caddy 도메인
-  caddyEmail: string,         // Caddy 이메일 (SSL용)
-  targetDir: string           // 프로젝트명으로부터 자동 생성
-}
-```
-
-#### `ProjectGenerator.js`
-**패턴**: Orchestrator / Facade
-
-**목적**: 모든 processor와 updater를 조정하여 프로젝트 생성
-
-**의존성**:
-- `TemplateComposer`: 템플릿 파일 작업
-- `FileProcessor`: 파일 처리 유틸리티
-- `DependencyManager`: 의존성 관리
-- `PackageJsonUpdater`: package.json 수정
-- `ConfigFileUpdater`: 설정 파일 업데이트
-
-**메서드**:
-- `validate()`: 생성 전 검증
-- `generate()`: 전체 생성 파이프라인 실행
-
-**생성 파이프라인**:
-```javascript
-validate() →
-  copyTemplate() →
-    processAllFiles() →
-      updatePackageJson() →
-        updateConfigFiles() →
-          installDependencies()
-```
-
----
-
-### 3. 프롬프트 레이어
-
-#### `basePrompts.js`
-**목적**: 기본 프로젝트 정보 수집
-
-**프롬프트**:
-- `promptProjectName()`: 프로젝트명 (kebab-case 검증)
-- `promptDescription(projectName)`: 프로젝트 설명 (선택사항)
-
-#### `frameworkPrompts.js`
-**목적**: 프레임워크 및 언어 선택
-
-**프롬프트**:
-- `promptFramework()`: 프레임워크 선택 (vanilla/react/svelte)
-- `promptLanguage()`: 언어 선택 (javascript/typescript)
-
-**템플릿 결정**: 프레임워크 + 언어 조합으로 자동 결정
-- `vanilla + javascript` → `templates/frameworks/vanilla/js/`
-- `vanilla + typescript` → `templates/frameworks/vanilla/ts/` (향후 지원)
-- `react + javascript` → `templates/frameworks/react/js/` (향후 지원)
-- `svelte + typescript` → `templates/frameworks/svelte/ts/` (향후 지원)
-
-#### `devServerPrompts.js`
-**목적**: 개발 서버 설정
-
-**프롬프트**:
-- `promptWebSocketPort()`: WebSocket 서버 포트 (기본값: 13131)
-- `promptCaddy()`: Caddy 리버스 프록시 활성화 (yes/no)
-- `promptCaddyDomain()`: Caddy 도메인 (WSS용, 조건부)
-- `promptCaddyEmail()`: Caddy 이메일 (SSL용, 조건부)
-
----
-
-### 4. 프로세서 레이어
-
-#### `TemplateComposer.js`
-**목적**: 템플릿 파일 작업 및 조합
-
-**주요 메서드**:
-- `checkTargetExists()`: 타겟 디렉토리 존재 여부 확인
-- `validateTemplate()`: 템플릿 디렉토리 존재 검증
-- `copyTemplate()`: 기본 템플릿 + 번들러 설정 복사
-- `copyBundlerConfig()`: 프레임워크별 번들러 설정 복사
-- `copyCaddyTemplate()`: Caddy 설정 파일 복사 (활성화 시)
-
-**템플릿 해석 로직**:
-```
 templates/
-  ├── frameworks/                # 프레임워크별 템플릿
-  │   ├── vanilla/
-  │   │   ├── js/               # JavaScript 버전
-  │   │   │   ├── src/
-  │   │   │   ├── scripts/
-  │   │   │   └── package.json
-  │   │   └── ts/               # TypeScript 버전 (향후)
-  │   ├── react/                # React 템플릿 (향후)
-  │   │   ├── js/
-  │   │   └── ts/
-  │   └── svelte/               # Svelte 템플릿 (향후)
-  │       ├── js/
-  │       └── ts/
-  │
-  ├── bundlers/                 # 번들러별 설정
-  │   └── vite/
-  │       └── vite.config.{framework}-{language}.js
-  │
-  ├── dependencies/             # 번들러별 의존성
-  │   └── package.{bundler}.json
-  │
-  └── sample/                   # 공통 템플릿 파일
-      └── caddy.config.template
+├── bundlers/vite/ts/
+│   ├── vite.config.svelte.ts
+│   └── vite.config.vanilla.ts
+├── dependencies/
+│   ├── package.common.json
+│   ├── package.svelte.json
+│   └── package.vite.json
+└── frameworks/
+    ├── svelte/ts/
+    └── vanilla/ts/
 ```
 
-**언어 약어 변환**:
-- `javascript` → `js`
-- `typescript` → `ts`
+## Generation flow
 
-**템플릿 경로 결정 로직**:
-```javascript
-const languageAbbr = language === 'javascript' ? 'js' : 'ts';
-const templateDir = path.join(templatesBaseDir, "frameworks", framework, languageAbbr);
-// 예: templates/frameworks/vanilla/js/
-```
+1. `createProject.js` collects project name, description, registry check choice, and framework.
+2. `ProjectConfig` validates the v3-only config. Valid framework values are `vanilla` and `svelte`; bundler is Vite; source language is TypeScript.
+3. `ProjectGenerator` validates the target directory and selected template.
+4. `TemplateComposer` copies `templates/frameworks/<framework>/ts` and the matching Vite config to `vite.config.ts`.
+5. `FileProcessor` renames `gitignore.template` to `.gitignore`.
+6. `PackageJsonUpdater` applies generated package metadata and dependency fragments.
+7. `ConfigFileUpdater` replaces placeholders in README and `src/constants/plugin.ts`.
+8. `DependencyManager` runs install in the generated project.
 
-#### `DependencyManager.js`
-**목적**: 의존성 조합 및 설치
+## Generated project contract
 
-**주요 메서드**:
-- `composeDependencies()`: 기본 + 번들러 + 프레임워크 의존성 병합
-- `install()`: 타겟 디렉토리에서 `npm install` 실행
+Every generated project should include:
 
-**의존성 조합 로직**:
-```javascript
-기본 의존성 (templates/frameworks/{framework}/{language}/package.json)
-  + 번들러 의존성 (templates/dependencies/package.{bundler}.json)
-  + 프레임워크 의존성 (향후)
-  = 최종 의존성
-```
+- `package.json`, `tsconfig.json`, `vite.config.ts`, `README.md`, and `.gitignore`.
+- `src/main.ts`, `src/constants/plugin.ts`, `src/helpers/plugin-storage.ts`, `src/helpers/chat-context.ts`, and `src/types/risuai.d.ts`.
+- A single built plugin file in `dist/<package-name>.js`.
+- A metadata banner with `//@api 3.0` and the usual plugin identity fields.
+- A default UI that runs inside the plugin iframe and opens through `registerSetting` plus `showContainer`.
 
-#### `FileProcessor.js`
-**목적**: 템플릿 파일 변환 및 처리
+Svelte templates also include `src/App.svelte`; vanilla templates include `src/ui/panel.ts`.
 
-**주요 메서드**:
-- `processAllFiles()`: 모든 템플릿 파일 처리
-- `processGitignore()`: `gitignore.template` → `.gitignore` 이름 변경
-- `processCaddyTemplate()`: `caddy.config.template` → `caddy.config` 변환 (플레이스홀더 치환)
+## Template change workflow
 
-**템플릿 처리 패턴**:
-1. **단순 이름 변경** (gitignore): `fs.move()` 사용
-2. **내용 치환 후 변환** (caddy): 읽기 → 플레이스홀더 치환 → 쓰기 → 원본 삭제
+Treat the template tree as the source of truth for generated project behavior.
 
-**`gitignore.template` 사용 이유**:
-npm에 배포 시 `.gitignore` 파일은 무시됩니다. 이를 우회하기 위해 `gitignore.template`을 사용하고 프로젝트 생성 시 이름을 변경합니다.
+1. Change `templates/frameworks/<framework>/ts` first.
+2. Change `templates/bundlers/vite/ts` when output format, metadata, or framework build behavior changes.
+3. Change `templates/dependencies` only when the generated project needs a package at install time.
+4. Keep placeholder names aligned with `ConfigFileUpdater`.
+5. Generate vanilla and Svelte projects in a temporary directory.
+6. Run `npm run build` in both generated projects.
+7. Inspect each `dist/<package-name>.js` for `//@api 3.0` and a single JavaScript bundle.
+8. Run static checks over active templates and generated projects for removed legacy terms.
 
----
+## Dependency policy
 
-### 5. 업데이터 레이어
+Vanilla projects should stay minimal: Vite, TypeScript, and Node types. Svelte projects add Svelte and the Svelte Vite plugin. Avoid adding style frameworks, icon packs, utility libraries, storage libraries, or release tooling unless a plan says they are part of the product surface.
 
-#### `PackageJsonUpdater.js`
-**목적**: package.json에 프로젝트별 값 업데이트
+## Docs policy
 
-**업데이트 작업**:
-1. **기본 정보**:
-   - `name` → `config.projectName`
-   - `description` → `config.description`
-   - `browser` → `dist/${projectName}.js`
-   - `unpkg` → `dist/${projectName}.js`
+Generated READMEs should teach the current Risuai API v3 workflow:
 
-2. **의존성**: `DependencyManager`로부터 조합된 의존성 병합
+- Build with Vite.
+- Import or select the built `dist/<plugin>.js` file in Risuai.
+- Use the Risuai v3 file-based reload flow when iterating locally.
+- Add `//@update-url` only for a hosted plugin file with a stable URL.
 
-3. **Caddy 통합** (`config.useCaddy` 활성화 시):
-   - `dev` 스크립트에 `"caddy run --config caddy.config --adapter caddyfile"` 추가
-   - 예시: `"dev": "cross-env NODE_ENV=development concurrently \"npm run dev:server\" \"npm run dev:vite\" \"caddy run --config caddy.config --adapter caddyfile\""`
+Maintainer docs must not link to deleted files. If a guide is removed, update every reference in the same change.
 
-**스크립트 업데이트 로직**:
-```javascript
-// 이전
-"dev": "cross-env NODE_ENV=development concurrently \"npm run dev:server\" \"npm run dev:vite\""
+## Guardrails
 
-// 이후 (Caddy 사용 시)
-"dev": "cross-env NODE_ENV=development concurrently \"npm run dev:server\" \"npm run dev:vite\" \"caddy run --config caddy.config --adapter caddyfile\""
-```
+Default scaffold code should not include:
 
-#### `ConfigFileUpdater.js`
-**목적**: 설정 파일에 사용자 설정 업데이트
+- Extra UI framework defaults.
+- Non-TypeScript variants.
+- Legacy API wrappers.
+- Custom socket reload code.
+- Runtime updater modules.
+- Alternate bundler defaults.
+- Reverse proxy setup references.
+- IndexedDB or browser storage fallback helpers.
+- Main Risuai app DOM access.
 
-**업데이트 작업**:
-
-1. **README.md**: 프로젝트명, 파일명 플레이스홀더 치환
-2. **constants.js**: 프로젝트명 플레이스홀더 치환
-3. **dev-server.js**: WebSocket 포트 업데이트
-4. **Vite 설정** (`vite.config.js`):
-   - `vitePluginDevMode.defaultPort` → `config.websocketPort` 업데이트
-   - Caddy 활성화 시 옵션 추가:
-     ```javascript
-     vitePluginDevMode({
-       defaultPort: {websocketPort},
-       useCaddy: true,
-       caddyDomain: '{caddyDomain}'
-     })
-     ```
-
-**정규식 기반 치환 전략**:
-모든 업데이트는 전체 AST 파싱 없이 정규식 패턴을 사용하여 생성된 파일을 수정합니다.
-
----
-
-## 🔧 확장 포인트
-
-### 새 프레임워크 추가하기
-1. `frameworkPrompts.js`에 프레임워크 옵션 추가
-2. 템플릿 디렉토리 구조 생성:
-   ```
-   templates/frameworks/{framework}/
-     ├── js/          # JavaScript 버전
-     │   ├── src/
-     │   ├── scripts/
-     │   └── package.json
-     └── ts/          # TypeScript 버전 (필요 시)
-         ├── src/
-         ├── scripts/
-         └── package.json
-   ```
-3. 번들러 설정 생성:
-   - `templates/bundlers/vite/vite.config.{framework}-js.js`
-   - `templates/bundlers/vite/vite.config.{framework}-ts.js` (필요 시)
-4. 프레임워크별 의존성 파일 생성 (필요 시)
-
-**상세 절차는 [CLAUDE.md](./CLAUDE.md) 참조**
-
-### 새 번들러 추가하기
-1. 번들러 템플릿 디렉토리 생성: `templates/bundlers/{bundler}/`
-2. 각 프레임워크/언어 조합에 대한 번들러 설정 파일 생성:
-   - `{bundler}.config.vanilla-js.js`
-   - `{bundler}.config.vanilla-ts.js`
-   - `{bundler}.config.react-js.js` (향후)
-   - 등등...
-3. 의존성 파일 생성: `templates/dependencies/package.{bundler}.json`
-4. `ConfigFileUpdater`에 번들러 업데이트 로직 추가
-
-### 새 언어 추가하기
-1. `frameworkPrompts.js`에 언어 옵션 추가
-2. 각 프레임워크에 대한 언어별 템플릿 생성:
-   - `templates/frameworks/{framework}/{language}/`
-3. 번들러 설정 생성:
-   - `templates/bundlers/vite/vite.config.{framework}-{language}.js`
-4. `TemplateComposer`의 언어 약어 변환 로직 업데이트 (필요 시)
-
-**상세 절차는 [CLAUDE.md](./CLAUDE.md) 참조**
-
----
-
-## 🐛 일반적인 문제 및 해결 방법
-
-### 문제: 템플릿을 찾을 수 없음
-**원인**: 프레임워크/언어 조합에 대한 번들러 설정 파일 누락
-
-**해결 방법**: `{bundler}.config.{framework}-{language}.js` 파일이 존재하는지 확인
-```
-templates/bundlers/vite/
-  ├── vite.config.vanilla-js.js      ✅
-  ├── vite.config.vanilla-ts.js      ✅
-  ├── vite.config.react-js.js        ❌ 누락!
-  └── vite.config.react-ts.js        ❌ 누락!
-```
-
-### 문제: 의존성이 설치되지 않음
-**원인**: 의존성 파일 누락 또는 병합 실패
-
-**해결 방법**: `templates/dependencies/package.{bundler}.json` 존재 확인
-
-### 문제: Caddy 설정이 업데이트되지 않음
-**원인**: `ConfigFileUpdater`의 정규식 패턴 불일치
-
-**해결 방법**: 플레이스홀더 형식이 템플릿과 일치하는지 확인:
-- `{DOMAIN}` (정확히 일치, 대소문자 구분)
-- `{EMAIL}` (정확히 일치, 대소문자 구분)
-- `{DEV_SERVER_PORT}` (정확히 일치, 대소문자 구분)
-
-### 문제: 무한 빌드 루프
-**원인**: 자동 생성 파일이 watch rebuild를 트리거함
-
-**해결 방법**: `build.watch.exclude`에 다음 포함 여부 확인:
-```javascript
-watch: {
-  exclude: [
-    '**/src/core/plugin-config.js',
-    '**/src/core/dev-reload.js',
-    '**/node_modules/**'
-  ]
-}
-```
-
----
-
-## 📊 데이터 흐름 다이어그램
-
-```
-사용자 입력
-    ↓
-┌─────────────────────────────────────┐
-│      ProjectConfig (Builder)        │
-│  - projectName                      │
-│  - description                      │
-│  - framework                        │
-│  - language                         │
-│  - bundler                          │
-│  - websocketPort                    │
-│  - useCaddy / caddyDomain / email   │
-└─────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────┐
-│     ProjectGenerator.validate()     │
-│  - 설정 검증                         │
-│  - 타겟 디렉토리 확인                │
-│  - 템플릿 존재 여부 확인             │
-└─────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────┐
-│   TemplateComposer.copyTemplate()   │
-│  - 기본 템플릿 복사                  │
-│  - 번들러 설정 복사                  │
-└─────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────┐
-│  FileProcessor.processAllFiles()    │
-│  - gitignore.template → .gitignore   │
-│  - caddy.config.template → caddy.config (치환)│
-└─────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────┐
-│   PackageJsonUpdater.update()       │
-│  - 프로젝트 정보 업데이트            │
-│  - 의존성 병합                       │
-│  - dev 스크립트 업데이트 (Caddy)     │
-└─────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────┐
-│  ConfigFileUpdater.updateAll()      │
-│  - README.md 업데이트                │
-│  - constants.js 업데이트             │
-│  - dev-server.js 포트 업데이트       │
-│  - vite.config.js 업데이트           │
-└─────────────────────────────────────┘
-    ↓
-┌─────────────────────────────────────┐
-│  DependencyManager.install()        │
-│  - npm install                      │
-└─────────────────────────────────────┘
-    ↓
-프로젝트 생성 완료! 🎉
-```
-
----
-
-## 🚀 향후 개선 사항
-
-### 높은 우선순위
-- [ ] React 프레임워크 지원 (`templates/react/js/`, `templates/react/ts/`)
-- [ ] Svelte 프레임워크 지원 (`templates/svelte/js/`, `templates/svelte/ts/`)
-- [ ] TypeScript 지원 (`templates/*/ts/` 템플릿 구현)
-
-### 중간 우선순위
-- [ ] 미리보기 기능이 있는 대화형 모드
-- [ ] 빠른 생성을 위한 템플릿 캐싱
-- [ ] Dry-run 모드 (생성될 내용 미리보기)
-- [ ] 사용자 제공 템플릿 지원
-
-### 낮은 우선순위
-- [ ] 템플릿 버전 관리
-- [ ] 프로젝트 업데이트/마이그레이션 도구
-- [ ] 인기 설정 분석
-- [ ] 커스텀 processor를 위한 플러그인 생태계
-
----
-
-## 📝 버전 히스토리
-
-### v1.3.0 (현재)
-- ✅ 템플릿 선택 제거, 프레임워크 + 언어 조합으로 자동 결정
-- ✅ FileProcessor로 모든 템플릿 파일 처리 통합
-- ✅ 아키텍처 개선: 관심사의 분리 강화
-
-### v1.2.0
-- ✅ Terser 압축을 사용한 Vite 번들러 지원
-- ✅ WSS용 Caddy 리버스 프록시 통합
-- ✅ 무한 빌드 루프 방지
-- ✅ Webpack → Vite 완전한 기능 동등성
-- ✅ 빌드 watch 모드 최적화
-
-### v1.0.3
-- ✅ Webpack 번들러 지원
-- ✅ Vanilla JavaScript 프레임워크
-- ✅ WebSocket 개발 서버
-- ✅ Hot reload 기능
-
----
-
-## 📚 관련 문서
-
-- **[CLAUDE.md](./CLAUDE.md)** - LLM을 위한 프레임워크 추가 가이드
-- [Vite 설정 가이드](../templates/bundlers/vite/README.md) (존재 시)
-- [Webpack 설정 가이드](../templates/bundlers/webpack/README.md) (존재 시)
-- [Caddy 설정 가이드](../docs/CADDY_GUIDE.md)
-- [Caddy 통합 계획](../docs/CADDY_PLAN.md)
-- [템플릿 구조 가이드](../templates/README.md) (존재 시)
-
----
-
-**최종 업데이트**: 2025-01-15
-**관리자**: CLI Tool 개발팀
+If one of those topics is needed for historical context, keep it outside the default workflow and mark it as historical. Prefer removing stale references entirely.

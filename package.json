@@ -1,7 +1,7 @@
 {
   "name": "create-risu-plugin",
-  "version": "2.2.0",
-  "description": "CLI tool to scaffold RisuAI plugin projects with Hot Reload, auto-update, and modern development stack",
+  "version": "3.0.0",
+  "description": "CLI tool to scaffold Risuai API v3 TypeScript plugin projects with Vite, vanilla, and Svelte templates",
   "main": "lib/createProject.js",
   "type": "module",
   "bin": {
@@ -23,8 +23,10 @@
     "template",
     "create",
     "boilerplate",
-    "hot-reload",
-    "webpack"
+    "typescript",
+    "vite",
+    "svelte",
+    "risuai-v3"
   ],
   "author": "Chaebboong",
   "license": "MIT",
@@ -37,8 +39,8 @@
   },
   "homepage": "https://github.com/noelkim12/create-risu-plugin#readme",
   "engines": {
-    "node": ">=14.0.0",
-    "npm": ">=6.0.0"
+    "node": ">=20.19.0",
+    "npm": ">=10.0.0"
   },
   "dependencies": {
     "inquirer": "^9.0.0",

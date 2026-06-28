@@ -1,0 +1,16 @@
+{
+  "name": "risu-plugin-template",
+  "version": "1.0.0",
+  "description": "Risuai API v3 Svelte plugin template",
+  "type": "module",
+  "main": "dist/risu-plugin-template.js",
+  "browser": "dist/risu-plugin-template.js",
+  "unpkg": "dist/risu-plugin-template.js",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
