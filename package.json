@@ -1,9 +1,12 @@
 {
   "name": "create-risu-plugin",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "CLI tool to scaffold Risuai API v3 TypeScript plugin projects with Vite, vanilla, and Svelte templates",
   "main": "lib/createProject.js",
   "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
   "bin": {
     "create-risu-plugin": "./bin/index.js"
   },

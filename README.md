@@ -21,6 +21,23 @@ npm run dev
 
 The CLI asks for a project name, description, package-name check, and framework. Framework choices are `vanilla` and `svelte`. TypeScript is always used.
 
+## Non-interactive mode
+
+Pass the project name as a positional argument to skip all prompts (used by tools such as risuai-workbench):
+
+```bash
+npx create-risu-plugin my-plugin --framework svelte --description "My plugin" --out ./my-plugin --skip-install
+```
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--framework` | `vanilla` | `vanilla` or `svelte` |
+| `--description` | `<Name> for RISU AI` | package.json description |
+| `--out` | `./<name>` | output directory (must not exist) |
+| `--skip-install` | off | skip `npm install` after scaffolding |
+
+The name must be kebab-case (`my-risu-plugin`). On success the last stdout line is `created: <absolute path>`. Exit code is non-zero on failure.
+
 ## Risuai v3 Development Flow
 
 1. Run `npm run dev` to start Vite watch mode, or run `npm run build` for a one-time build.
