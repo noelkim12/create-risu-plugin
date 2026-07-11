@@ -33,7 +33,21 @@ test("generate scaffolds a vanilla project without npm install when skipInstall 
   assert.ok(fs.existsSync(path.join(target, "vite.config.ts")));
   assert.ok(fs.existsSync(path.join(target, ".gitignore")));
   assert.ok(fs.existsSync(path.join(target, "src", "main.ts")));
+  assert.ok(fs.existsSync(path.join(target, "src", "helpers", "root-dom.ts")));
   assert.ok(!fs.existsSync(path.join(target, "node_modules")));
+});
+
+test("generate includes the root-dom helper in svelte projects", async () => {
+  const target = path.join(makeTmpDir(), "my-svelte-plugin");
+  const config = new ProjectConfig()
+    .setProjectName("my-svelte-plugin")
+    .setDescription("Test plugin")
+    .setFramework("svelte")
+    .setTargetDir(target);
+
+  await new ProjectGenerator(config, { skipInstall: true }).generate();
+
+  assert.ok(fs.existsSync(path.join(target, "src", "helpers", "root-dom.ts")));
 });
 
 test("generate throws instead of exiting when the target directory exists", async () => {
