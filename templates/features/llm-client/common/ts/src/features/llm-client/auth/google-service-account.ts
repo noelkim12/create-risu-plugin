@@ -6,8 +6,41 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token"
 const TOKEN_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 const JWT_LIFETIME_SECONDS = 3600
 const REFRESH_SKEW_MS = 60_000
+const REFRESH_TIMEOUT_MS = 60_000
 
 type CachedToken = { readonly value: string; readonly usableUntil: number }
+
+function awaitForCaller<T>(
+  promise: Promise<T>,
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+): Promise<T> {
+  if (signal?.aborted) {
+    return Promise.reject(new LlmError("ABORTED", "LLM request was cancelled.", "google-vertex"))
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    let settled = false
+    const finish = (complete: () => void) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      signal?.removeEventListener("abort", abort)
+      complete()
+    }
+    const abort = () => {
+      finish(() => reject(new LlmError("ABORTED", "LLM request was cancelled.", "google-vertex")))
+    }
+    const timer = setTimeout(() => {
+      finish(() => reject(new LlmError("TIMEOUT", "LLM request timed out.", "google-vertex")))
+    }, timeoutMs)
+    signal?.addEventListener("abort", abort, { once: true })
+    promise.then(
+      value => finish(() => resolve(value)),
+      error => finish(() => reject(error)),
+    )
+  })
+}
 
 function base64Url(bytes: Uint8Array): string {
   let binary = ""
@@ -74,6 +107,7 @@ async function signAssertion(credential: StoredCredential, nowMs: number): Promi
 export class GoogleServiceAccountTokenProvider {
   private readonly cache = new Map<string, CachedToken>()
   private readonly inFlight = new Map<string, Promise<string>>()
+  private generation = 0
 
   constructor(
     private readonly transport: HttpTransport,
@@ -87,22 +121,21 @@ export class GoogleServiceAccountTokenProvider {
   ): Promise<string> {
     const cached = this.cache.get(credential.revision)
     if (cached && this.now() < cached.usableUntil) return cached.value
-    const existing = this.inFlight.get(credential.revision)
-    if (existing) return existing
-
-    const request = this.refresh(credential, signal, timeoutMs)
-    this.inFlight.set(credential.revision, request)
-    try {
-      return await request
-    } finally {
-      this.inFlight.delete(credential.revision)
+    let request = this.inFlight.get(credential.revision)
+    if (!request) {
+      request = this.refresh(credential, this.generation)
+      this.inFlight.set(credential.revision, request)
+      void request.then(
+        () => this.removeInFlight(credential.revision, request),
+        () => this.removeInFlight(credential.revision, request),
+      )
     }
+    return awaitForCaller(request, signal, timeoutMs)
   }
 
   private async refresh(
     credential: StoredCredential,
-    signal: AbortSignal | undefined,
-    timeoutMs: number,
+    generation: number,
   ): Promise<string> {
     const assertion = await signAssertion(credential, this.now())
     const response = await this.transport.request({
@@ -113,13 +146,14 @@ export class GoogleServiceAccountTokenProvider {
         grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
         assertion,
       }).toString(),
-      signal,
-      timeoutMs,
+      timeoutMs: REFRESH_TIMEOUT_MS,
       networkRoute: "auto",
     })
     if (!response.ok) {
       throw new LlmError(
-        response.status === 400 || response.status === 401 ? "AUTH_FAILED" : "HTTP_ERROR",
+        response.status === 400 || response.status === 401 || response.status === 403
+          ? "AUTH_FAILED"
+          : "HTTP_ERROR",
         `Google OAuth token request failed with HTTP ${response.status}.`,
         "google-vertex",
         response.status,
@@ -144,14 +178,21 @@ export class GoogleServiceAccountTokenProvider {
     ) {
       throw new LlmError("INVALID_RESPONSE", "Google OAuth response is missing token fields.", "google-vertex")
     }
-    this.cache.set(credential.revision, {
-      value: value.access_token,
-      usableUntil: this.now() + value.expires_in * 1000 - REFRESH_SKEW_MS,
-    })
+    if (this.generation === generation) {
+      this.cache.set(credential.revision, {
+        value: value.access_token,
+        usableUntil: this.now() + value.expires_in * 1000 - REFRESH_SKEW_MS,
+      })
+    }
     return value.access_token
   }
 
+  private removeInFlight(revision: string, request: Promise<string>): void {
+    if (this.inFlight.get(revision) === request) this.inFlight.delete(revision)
+  }
+
   invalidate(): void {
+    this.generation += 1
     this.cache.clear()
     this.inFlight.clear()
   }
