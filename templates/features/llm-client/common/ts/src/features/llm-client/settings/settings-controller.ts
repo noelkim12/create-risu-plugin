@@ -102,8 +102,36 @@ function withProviderConfig(settings: LlmSettings, config: ProviderConfig): LlmS
   }
 }
 
+function cloneProviderConfig(config: ProviderConfig): ProviderConfig {
+  return config.provider === "openai-compatible"
+    ? { ...config, customHeaderNames: [...config.customHeaderNames] }
+    : { ...config }
+}
+
+function cloneSettings(settings: LlmSettings): LlmSettings {
+  return {
+    ...settings,
+    providers: {
+      "google-ai-studio": cloneProviderConfig(settings.providers["google-ai-studio"]),
+      "google-vertex": cloneProviderConfig(settings.providers["google-vertex"]),
+      "openai-compatible": cloneProviderConfig(settings.providers["openai-compatible"]),
+      ollama: cloneProviderConfig(settings.providers.ollama),
+    },
+  }
+}
+
+function cloneState(state: SettingsState): SettingsState {
+  return {
+    ...state,
+    settings: cloneSettings(state.settings),
+    activeConfig: cloneProviderConfig(state.activeConfig),
+    fieldErrors: { ...state.fieldErrors },
+  }
+}
+
 export class LlmSettingsController {
   private readonly listeners = new Set<Listener>()
+  private generation = 0
   private secretDraft: CredentialDraft = {}
   private testAbort: AbortController | null = null
   private state: SettingsState = {
@@ -127,32 +155,60 @@ export class LlmSettingsController {
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener)
-    listener(this.state)
+    listener(cloneState(this.state))
     return () => this.listeners.delete(listener)
   }
 
   private publish(patch: Partial<SettingsState>): void {
-    this.state = { ...this.state, ...patch }
-    for (const listener of this.listeners) listener(this.state)
+    this.state = cloneState({ ...this.state, ...patch })
+    for (const listener of this.listeners) listener(cloneState(this.state))
   }
 
   private activeConfig(settings = this.state.settings): ProviderConfig {
     return settings.providers[settings.activeProvider]
   }
 
+  private beginMutation(): number {
+    this.generation += 1
+    this.testAbort?.abort()
+    this.testAbort = null
+    return this.generation
+  }
+
+  private isCurrent(generation: number): boolean {
+    return this.generation === generation
+  }
+
+  private refreshCredentialStatus(config: ProviderConfig, generation: number): void {
+    void this.credentialRepository.status(config).then(credentialState => {
+      if (this.isCurrent(generation)) this.publish({ credentialState })
+    }).catch(error => {
+      if (!this.isCurrent(generation)) return
+      this.publish({
+        operation: "error",
+        statusMessage: this.safeMessage(error, "Credential status could not be checked."),
+      })
+    })
+  }
+
   async load(): Promise<void> {
+    const generation = this.beginMutation()
     this.publish({ operation: "loading", statusMessage: "Loading LLM settings…" })
     try {
-      const [settings, runtime] = await Promise.all([
+      const [loadedSettings, runtime] = await Promise.all([
         this.settingsRepository.load(),
         this.getRuntimeInfo(),
       ])
+      if (!this.isCurrent(generation)) return
+      const settings = cloneSettings(loadedSettings)
       const activeConfig = this.activeConfig(settings)
+      const credentialState = await this.credentialRepository.status(activeConfig)
+      if (!this.isCurrent(generation)) return
       this.publish({
         operation: "idle",
         settings,
         activeConfig,
-        credentialState: await this.credentialRepository.status(activeConfig),
+        credentialState,
         dirty: false,
         fieldErrors: validateProviderConfig(activeConfig),
         statusMessage: "",
@@ -163,6 +219,7 @@ export class LlmSettingsController {
             : "web",
       })
     } catch (error) {
+      if (!this.isCurrent(generation)) return
       this.publish({
         operation: "error",
         statusMessage: error instanceof LlmError ? error.message : "Settings failed to load.",
@@ -171,64 +228,65 @@ export class LlmSettingsController {
   }
 
   selectProvider(provider: ProviderId): void {
-    const settings = { ...this.state.settings, activeProvider: provider }
+    const generation = this.beginMutation()
+    const settings = cloneSettings({ ...this.state.settings, activeProvider: provider })
     const activeConfig = settings.providers[provider]
     this.secretDraft = {}
     this.publish({
+      operation: "idle",
       settings,
       activeConfig,
       dirty: true,
       fieldErrors: validateProviderConfig(activeConfig),
       statusMessage: "",
     })
-    void this.credentialRepository.status(activeConfig).then(credentialState => {
-      if (this.state.activeConfig === activeConfig) this.publish({ credentialState })
-    })
+    this.refreshCredentialStatus(activeConfig, generation)
   }
 
   updateConfig(config: ProviderConfig): void {
+    const generation = this.beginMutation()
+    const configSnapshot = cloneProviderConfig(config)
     if (
       this.state.activeConfig.provider === "google-vertex"
-      && config.provider === "google-vertex"
-      && this.state.activeConfig.authMode !== config.authMode
+      && configSnapshot.provider === "google-vertex"
+      && this.state.activeConfig.authMode !== configSnapshot.authMode
     ) {
       this.secretDraft = {}
     }
-    const settings = withProviderConfig(this.state.settings, config)
+    const settings = withProviderConfig(this.state.settings, configSnapshot)
     this.publish({
+      operation: "idle",
       settings,
-      activeConfig: config,
+      activeConfig: configSnapshot,
       dirty: true,
-      fieldErrors: validateProviderConfig(config),
+      fieldErrors: validateProviderConfig(configSnapshot),
       statusMessage: "",
     })
-    void this.credentialRepository.status(config).then(credentialState => {
-      if (this.state.activeConfig === config) this.publish({ credentialState })
-    })
+    this.refreshCredentialStatus(configSnapshot, generation)
   }
 
   setSecretDraft(draft: CredentialDraft): void {
+    this.beginMutation()
     this.secretDraft = { ...this.secretDraft, ...draft }
-    this.publish({ dirty: true, statusMessage: "" })
+    this.publish({ operation: "idle", dirty: true, statusMessage: "" })
   }
 
   private safeMessage(error: unknown, fallback: string): string {
     return error instanceof LlmError ? error.message : fallback
   }
 
-  private configWithDraftHeaders(): {
+  private configWithDraftHeaders(config: ProviderConfig, draft: CredentialDraft): {
     readonly config: ProviderConfig
     readonly customHeaders: Record<string, string> | null
   } {
-    const config = this.state.activeConfig
     if (
       config.provider !== "openai-compatible"
-      || this.secretDraft.customHeadersJson === undefined
-      || this.secretDraft.customHeadersJson.trim() === ""
+      || draft.customHeadersJson === undefined
+      || draft.customHeadersJson.trim() === ""
     ) {
       return { config, customHeaders: null }
     }
-    const customHeaders = parseCustomHeaders(this.secretDraft.customHeadersJson)
+    const customHeaders = parseCustomHeaders(draft.customHeadersJson)
     return {
       config: { ...config, customHeaderNames: Object.keys(customHeaders) },
       customHeaders,
@@ -238,10 +296,11 @@ export class LlmSettingsController {
   private async draftCredential(
     config: ProviderConfig,
     customHeaders: Record<string, string> | null,
+    draft: CredentialDraft,
   ): Promise<StoredCredential | null> {
     const stored = await this.credentialRepository.load(config)
-    const apiKey = this.secretDraft.apiKey?.trim() ?? ""
-    const serviceAccountJson = this.secretDraft.serviceAccountJson?.trim() ?? ""
+    const apiKey = draft.apiKey?.trim() ?? ""
+    const serviceAccountJson = draft.serviceAccountJson?.trim() ?? ""
 
     if (config.provider === "google-vertex" && config.authMode === "service-account") {
       return serviceAccountJson === ""
@@ -266,23 +325,30 @@ export class LlmSettingsController {
   }
 
   async save(): Promise<void> {
+    const generation = this.beginMutation()
+    const settingsSnapshot = cloneSettings(this.state.settings)
+    const configSnapshot = cloneProviderConfig(this.activeConfig(settingsSnapshot))
+    const draft = { ...this.secretDraft }
     this.publish({ operation: "saving", statusMessage: "Saving locally…" })
     try {
-      const { config, customHeaders } = this.configWithDraftHeaders()
+      const { config, customHeaders } = this.configWithDraftHeaders(configSnapshot, draft)
       this.publish({ fieldErrors: validateProviderConfig(config) })
       assertValidProviderConfig(config)
-      const settings = withProviderConfig(this.state.settings, config)
-      await this.settingsRepository.save(settings)
+      const settings = withProviderConfig(settingsSnapshot, config)
+      await this.settingsRepository.save(cloneSettings(settings))
+      if (!this.isCurrent(generation)) return
 
-      const apiKey = this.secretDraft.apiKey?.trim() ?? ""
-      const serviceAccountJson = this.secretDraft.serviceAccountJson?.trim() ?? ""
+      const apiKey = draft.apiKey?.trim() ?? ""
+      const serviceAccountJson = draft.serviceAccountJson?.trim() ?? ""
       if (config.provider === "google-vertex" && config.authMode === "service-account") {
         if (serviceAccountJson !== "") {
           await this.credentialRepository.saveServiceAccountJson(config, serviceAccountJson)
+          if (!this.isCurrent(generation)) return
         }
       } else if (config.provider === "openai-compatible") {
         if (apiKey !== "" || customHeaders !== null) {
           const stored = await this.credentialRepository.load(config)
+          if (!this.isCurrent(generation)) return
           const preservedHeaders = customHeaders ?? Object.fromEntries(
             config.customHeaderNames
               .map(name => [name, stored?.secret[name]] as const)
@@ -293,23 +359,28 @@ export class LlmSettingsController {
             apiKey || stored?.secret.apiKey || "",
             preservedHeaders,
           )
+          if (!this.isCurrent(generation)) return
         }
       } else if (apiKey !== "") {
         await this.credentialRepository.saveApiKey(config, apiKey, {})
+        if (!this.isCurrent(generation)) return
       }
       if (config.provider === "google-vertex") this.invalidateAuthCaches()
 
+      const credentialState = await this.credentialRepository.status(config)
+      if (!this.isCurrent(generation)) return
       this.secretDraft = {}
       this.publish({
         operation: "success",
         settings,
         activeConfig: config,
-        credentialState: await this.credentialRepository.status(config),
+        credentialState,
         dirty: false,
         fieldErrors: {},
         statusMessage: "Saved locally.",
       })
     } catch (error) {
+      if (!this.isCurrent(generation)) return
       this.publish({
         operation: "error",
         statusMessage: this.safeMessage(error, "LLM settings could not be saved."),
@@ -318,25 +389,27 @@ export class LlmSettingsController {
   }
 
   async testConnection(): Promise<void> {
-    this.cancelTest()
+    const generation = this.beginMutation()
+    const configSnapshot = cloneProviderConfig(this.state.activeConfig)
+    const draft = { ...this.secretDraft }
     const abort = new AbortController()
     this.testAbort = abort
     this.publish({ operation: "testing", statusMessage: "Testing connection…" })
     try {
-      const { config, customHeaders } = this.configWithDraftHeaders()
+      const { config, customHeaders } = this.configWithDraftHeaders(configSnapshot, draft)
       this.publish({ fieldErrors: validateProviderConfig(config) })
       assertValidProviderConfig(config)
-      const credential = await this.draftCredential(config, customHeaders)
-      if (this.testAbort !== abort || abort.signal.aborted) return
+      const credential = await this.draftCredential(config, customHeaders, draft)
+      if (!this.isCurrent(generation) || this.testAbort !== abort || abort.signal.aborted) return
       const response = await this.client.testConnection(config, credential, abort.signal)
-      if (this.testAbort !== abort) return
+      if (!this.isCurrent(generation) || this.testAbort !== abort) return
       this.testAbort = null
       this.publish({
         operation: "success",
         statusMessage: `Connected to ${response.provider} / ${response.model}.`,
       })
     } catch (error) {
-      if (this.testAbort !== abort) return
+      if (!this.isCurrent(generation) || this.testAbort !== abort) return
       const cancelled = error instanceof LlmError && error.code === "ABORTED"
       this.testAbort = null
       this.publish({
@@ -350,17 +423,20 @@ export class LlmSettingsController {
 
   cancelTest(): void {
     const active = this.testAbort
+    this.generation += 1
     active?.abort()
     this.testAbort = null
     if (active) this.publish({ operation: "idle", statusMessage: "Connection test cancelled." })
   }
 
   async clearCredential(): Promise<void> {
-    this.cancelTest()
+    const generation = this.beginMutation()
+    const config = cloneProviderConfig(this.state.activeConfig)
     this.publish({ operation: "saving", statusMessage: "Removing credential…" })
     try {
-      await this.credentialRepository.clear(this.state.activeConfig)
-      if (this.state.activeConfig.provider === "google-vertex") this.invalidateAuthCaches()
+      await this.credentialRepository.clear(config)
+      if (config.provider === "google-vertex") this.invalidateAuthCaches()
+      if (!this.isCurrent(generation)) return
       this.secretDraft = {}
       this.publish({
         operation: "success",
@@ -368,6 +444,7 @@ export class LlmSettingsController {
         statusMessage: "Credential removed.",
       })
     } catch (error) {
+      if (!this.isCurrent(generation)) return
       this.publish({
         operation: "error",
         statusMessage: this.safeMessage(error, "Credential could not be removed."),
@@ -376,16 +453,18 @@ export class LlmSettingsController {
   }
 
   async resetActiveProvider(): Promise<void> {
-    this.cancelTest()
+    const generation = this.beginMutation()
+    const currentSettings = cloneSettings(this.state.settings)
+    const provider = currentSettings.activeProvider
+    const config = cloneProviderConfig(createDefaultSettings().providers[provider])
+    const settings = withProviderConfig(currentSettings, config)
     this.publish({ operation: "saving", statusMessage: "Resetting provider…" })
     try {
-      const defaults = createDefaultSettings()
-      const provider = this.state.settings.activeProvider
-      const config = defaults.providers[provider]
-      const settings = withProviderConfig(this.state.settings, config)
       await this.credentialRepository.clearProvider(provider)
       if (provider === "google-vertex") this.invalidateAuthCaches()
-      await this.settingsRepository.save(settings)
+      if (!this.isCurrent(generation)) return
+      await this.settingsRepository.save(cloneSettings(settings))
+      if (!this.isCurrent(generation)) return
       this.secretDraft = {}
       this.publish({
         operation: "success",
@@ -397,6 +476,7 @@ export class LlmSettingsController {
         statusMessage: "Provider reset.",
       })
     } catch (error) {
+      if (!this.isCurrent(generation)) return
       this.publish({
         operation: "error",
         statusMessage: this.safeMessage(error, "Provider could not be reset."),
@@ -405,7 +485,7 @@ export class LlmSettingsController {
   }
 
   dispose(): void {
-    this.cancelTest()
+    this.beginMutation()
     this.secretDraft = {}
     this.listeners.clear()
   }

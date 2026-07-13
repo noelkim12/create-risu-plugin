@@ -40,6 +40,16 @@ const storedCredential: StoredCredential = {
   secret: { apiKey: "stored-secret" },
 }
 
+function deferred<T>() {
+  let resolve: (value: T | PromiseLike<T>) => void = () => undefined
+  let reject: (reason?: unknown) => void = () => undefined
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, reject, resolve }
+}
+
 function createHarness(settingsValue = validSettings()) {
   const settings = {
     load: vi.fn().mockResolvedValue(settingsValue),
@@ -235,6 +245,206 @@ describe("LlmSettingsController", () => {
       operation: "error",
       statusMessage: "Connection test failed.",
     })
+  })
+
+  it("does not save a newer provider draft through an older save", async () => {
+    const harness = createHarness()
+    await harness.controller.load()
+    const settingsSave = deferred<void>()
+    harness.settings.save.mockReturnValueOnce(settingsSave.promise)
+    harness.controller.setSecretDraft({ apiKey: "studio-draft" })
+    const staleSave = harness.controller.save()
+    await vi.waitFor(() => expect(harness.settings.save).toHaveBeenCalledOnce())
+    harness.controller.selectProvider("ollama")
+    harness.controller.setSecretDraft({ apiKey: "ollama-draft" })
+    settingsSave.resolve()
+    await staleSave
+
+    expect(harness.credentials.saveApiKey).not.toHaveBeenCalled()
+    expect(harness.state()).toMatchObject({
+      activeConfig: { provider: "ollama" },
+      dirty: true,
+      operation: "idle",
+      statusMessage: "",
+    })
+
+    await harness.controller.save()
+    expect(harness.credentials.saveApiKey).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "ollama" }),
+      "ollama-draft",
+      {},
+    )
+  })
+
+  it("does not test a newer audience or draft through an older credential load", async () => {
+    const harness = createHarness(validSettings("openai-compatible"))
+    await harness.controller.load()
+    const credentialLoad = deferred<StoredCredential | null>()
+    harness.credentials.load.mockReturnValueOnce(credentialLoad.promise)
+    harness.controller.setSecretDraft({ apiKey: "old-draft" })
+
+    const staleTest = harness.controller.testConnection()
+    await vi.waitFor(() => expect(harness.credentials.load).toHaveBeenCalledOnce())
+    harness.controller.updateConfig({
+      ...harness.state().activeConfig,
+      provider: "openai-compatible",
+      baseUrl: "https://new.example/v1",
+    })
+    harness.controller.setSecretDraft({ apiKey: "new-draft" })
+    credentialLoad.resolve(null)
+    await staleTest
+
+    expect(harness.client.testConnection).not.toHaveBeenCalled()
+    expect(harness.state()).toMatchObject({ operation: "idle", dirty: true, statusMessage: "" })
+
+    harness.credentials.load.mockResolvedValueOnce(null)
+    await harness.controller.testConnection()
+    expect(harness.client.testConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ baseUrl: "https://new.example/v1" }),
+      expect.objectContaining({ secret: { apiKey: "new-draft" } }),
+      expect.any(AbortSignal),
+    )
+  })
+
+  it("ignores a stale client test completion after a newer draft edit", async () => {
+    const harness = createHarness()
+    await harness.controller.load()
+    const clientTest = deferred<{ provider: ProviderId; model: string }>()
+    harness.client.testConnection.mockReturnValueOnce(clientTest.promise)
+
+    const staleTest = harness.controller.testConnection()
+    await vi.waitFor(() => expect(harness.client.testConnection).toHaveBeenCalledOnce())
+    harness.controller.setSecretDraft({ apiKey: "newer-draft" })
+    clientTest.resolve({ provider: "google-ai-studio", model: "stale-result" })
+    await staleTest
+
+    expect(harness.state()).toMatchObject({ operation: "idle", dirty: true, statusMessage: "" })
+  })
+
+  it("ignores a stale load completion after a newer edit", async () => {
+    const harness = createHarness()
+    const settingsLoad = deferred<LlmSettings>()
+    harness.settings.load.mockReturnValueOnce(settingsLoad.promise)
+
+    const staleLoad = harness.controller.load()
+    harness.controller.updateConfig({
+      ...harness.state().activeConfig,
+      model: "edited-while-loading",
+    })
+    settingsLoad.resolve(validSettings("ollama"))
+    await staleLoad
+
+    expect(harness.credentials.status).toHaveBeenCalledOnce()
+    expect(harness.credentials.status).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "edited-while-loading" }),
+    )
+    expect(harness.state()).toMatchObject({
+      activeConfig: { provider: "google-ai-studio", model: "edited-while-loading" },
+      dirty: true,
+      operation: "idle",
+    })
+  })
+
+  it("ignores stale clear and reset completions after newer edits", async () => {
+    const clearHarness = createHarness()
+    await clearHarness.controller.load()
+    const clear = deferred<void>()
+    clearHarness.credentials.clear.mockReturnValueOnce(clear.promise)
+    const staleClear = clearHarness.controller.clearCredential()
+    clearHarness.controller.updateConfig({
+      ...clearHarness.state().activeConfig,
+      model: "edited-while-clearing",
+    })
+    clear.resolve()
+    await staleClear
+    expect(clearHarness.state()).toMatchObject({
+      activeConfig: { model: "edited-while-clearing" },
+      dirty: true,
+      operation: "idle",
+      statusMessage: "",
+    })
+
+    const resetHarness = createHarness()
+    await resetHarness.controller.load()
+    const clearProvider = deferred<void>()
+    resetHarness.credentials.clearProvider.mockReturnValueOnce(clearProvider.promise)
+    const staleReset = resetHarness.controller.resetActiveProvider()
+    resetHarness.controller.updateConfig({
+      ...resetHarness.state().activeConfig,
+      model: "edited-while-resetting",
+    })
+    clearProvider.resolve()
+    await staleReset
+    expect(resetHarness.settings.save).not.toHaveBeenCalled()
+    expect(resetHarness.state()).toMatchObject({
+      activeConfig: { model: "edited-while-resetting" },
+      dirty: true,
+      operation: "idle",
+      statusMessage: "",
+    })
+  })
+
+  it("orders A-B-A credential status checks by generation and handles rejection", async () => {
+    const harness = createHarness()
+    await harness.controller.load()
+    const oldA = deferred<"missing" | "stored" | "stale">()
+    const providerB = deferred<"missing" | "stored" | "stale">()
+    const newA = deferred<"missing" | "stored" | "stale">()
+    harness.credentials.status
+      .mockReturnValueOnce(oldA.promise)
+      .mockReturnValueOnce(providerB.promise)
+      .mockReturnValueOnce(newA.promise)
+
+    harness.controller.updateConfig({ ...harness.state().activeConfig, model: "provider-a" })
+    harness.controller.selectProvider("ollama")
+    harness.controller.selectProvider("google-ai-studio")
+    newA.resolve("stored")
+    await vi.waitFor(() => expect(harness.state().credentialState).toBe("stored"))
+    oldA.resolve("stale")
+    providerB.resolve("missing")
+    await Promise.all([oldA.promise, providerB.promise])
+    await Promise.resolve()
+    expect(harness.state().credentialState).toBe("stored")
+
+    const rejected = deferred<"missing" | "stored" | "stale">()
+    harness.credentials.status.mockReturnValueOnce(rejected.promise)
+    harness.controller.updateConfig({ ...harness.state().activeConfig, model: "status-error" })
+    rejected.reject(new Error("private storage detail"))
+    await vi.waitFor(() => expect(harness.state()).toMatchObject({
+      operation: "error",
+      statusMessage: "Credential status could not be checked.",
+      dirty: true,
+    }))
+  })
+
+  it("isolates subscriber snapshots and cloned updateConfig inputs", async () => {
+    const harness = createHarness(validSettings("openai-compatible"))
+    await harness.controller.load()
+    const incomingHeaderNames = ["x-incoming"]
+    harness.controller.updateConfig({
+      ...harness.state().activeConfig,
+      provider: "openai-compatible",
+      customHeaderNames: incomingHeaderNames,
+    })
+    incomingHeaderNames.push("x-mutated-after-update")
+
+    let secondSnapshot: SettingsState | undefined
+    harness.controller.subscribe(snapshot => {
+      const exposedSettings = snapshot.settings as unknown as {
+        providers: { "openai-compatible": { customHeaderNames: string[] } }
+      }
+      const exposedConfig = snapshot.activeConfig as unknown as { customHeaderNames: string[] }
+      exposedSettings.providers["openai-compatible"].customHeaderNames.push("x-subscriber-mutation")
+      exposedConfig.customHeaderNames.push("x-active-config-mutation")
+    })
+    harness.controller.subscribe(snapshot => { secondSnapshot = snapshot })
+
+    expect(secondSnapshot?.activeConfig).toMatchObject({
+      provider: "openai-compatible",
+      customHeaderNames: ["x-incoming"],
+    })
+    expect(secondSnapshot?.settings.providers["openai-compatible"].customHeaderNames)
+      .toEqual(["x-incoming"])
   })
 
   it("clears only the active credential and leaves settings untouched", async () => {
