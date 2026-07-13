@@ -16,6 +16,37 @@ describe("device-local LLM repositories", () => {
     expect([...storage.values.keys()]).toEqual(["sample-plugin:llm-client:settings:v1"])
   })
 
+  it("strips runtime secret fields before persisting settings", async () => {
+    const storage = new MemoryLocalStorage()
+    const repository = new LocalSettingsRepository(() => Promise.resolve(storage), "sample-plugin")
+    const settings = createDefaultSettings()
+    const unsafeSettings = {
+      ...settings,
+      apiKey: "root-secret",
+      providers: {
+        ...settings.providers,
+        "google-ai-studio": {
+          ...settings.providers["google-ai-studio"],
+          apiKey: "studio-secret",
+        },
+        "google-vertex": {
+          ...settings.providers["google-vertex"],
+          serviceAccountJson: "vertex-secret-json",
+        },
+        "openai-compatible": {
+          ...settings.providers["openai-compatible"],
+          customHeaders: { "X-Secret": "header-secret" },
+        },
+      },
+    }
+
+    await repository.save(unsafeSettings)
+
+    const stored = storage.values.get("sample-plugin:llm-client:settings:v1")
+    expect(stored).toEqual(settings)
+    expect(JSON.stringify(stored)).not.toContain("secret")
+  })
+
   it("rejects malformed shared-storage settings instead of trusting their shape", async () => {
     const storage = new MemoryLocalStorage()
     storage.values.set("sample-plugin:llm-client:settings:v1", {
@@ -63,6 +94,23 @@ describe("device-local LLM repositories", () => {
     expect(storage.clearCalls).toHaveLength(0)
   })
 
+  it("clears exactly both Vertex credential slots for the provider", async () => {
+    const storage = new MemoryLocalStorage()
+    storage.values.set("sample-plugin:llm-client:credential:google-vertex-api-key:v1", "api-key")
+    storage.values.set("sample-plugin:llm-client:credential:google-vertex-service-account:v1", "service-account")
+    storage.values.set("sample-plugin:llm-client:credential:google-ai-studio:v1", "preserve-provider")
+    storage.values.set("another-plugin:data", "preserve-plugin")
+    const credentials = new LocalCredentialRepository(() => Promise.resolve(storage), "sample-plugin")
+
+    await credentials.clearProvider("google-vertex")
+
+    expect([...storage.values.entries()]).toEqual([
+      ["sample-plugin:llm-client:credential:google-ai-studio:v1", "preserve-provider"],
+      ["another-plugin:data", "preserve-plugin"],
+    ])
+    expect(storage.clearCalls).toHaveLength(0)
+  })
+
   it("parses required Service Account fields without storing the original JSON", async () => {
     const storage = new MemoryLocalStorage()
     const credentials = new LocalCredentialRepository(() => Promise.resolve(storage), "sample-plugin")
@@ -83,7 +131,13 @@ describe("device-local LLM repositories", () => {
     }))
 
     const stored = await credentials.load(config)
-    expect(stored?.secret).not.toHaveProperty("extra_field")
+    expect(stored).not.toBeNull()
+    expect(stored?.secret).toEqual({
+      projectId: "project-a",
+      clientEmail: "llm@project-a.iam.gserviceaccount.com",
+      privateKey: "-----BEGIN PRIVATE KEY-----\nTEST\n-----END PRIVATE KEY-----\n",
+      privateKeyId: "key-id",
+    })
     expect(JSON.stringify(stored)).not.toContain("token_uri")
   })
 })
