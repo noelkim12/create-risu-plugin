@@ -47,47 +47,85 @@ function composeSignal(signal: AbortSignal | undefined, timeoutMs: number) {
   }
 }
 
+function awaitWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"))
+
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(new DOMException("Aborted", "AbortError"))
+    signal.addEventListener("abort", abort, { once: true })
+    promise.then(
+      value => {
+        signal.removeEventListener("abort", abort)
+        resolve(value)
+      },
+      error => {
+        signal.removeEventListener("abort", abort)
+        reject(error)
+      },
+    )
+  })
+}
+
+function throwRequestError(
+  request: HttpRequest,
+  composed: ReturnType<typeof composeSignal>,
+): never {
+  if (request.signal?.aborted) throw new LlmError("ABORTED", "LLM request was cancelled.")
+  if (composed.timedOut()) throw new LlmError("TIMEOUT", "LLM request timed out.")
+  throw new LlmError("NETWORK_ERROR", "LLM network request failed.")
+}
+
 export class NativeFetchTransport implements HttpTransport {
   constructor(private readonly api: NativeFetchApi = risuai) {}
 
   async request(request: HttpRequest): Promise<HttpResponse> {
-    if (request.networkRoute === "local_network" && await this.isHostedWeb()) {
-      throw new LlmError(
-        "UNSUPPORTED_RUNTIME",
-        "Local network endpoints are unavailable in the hosted web runtime.",
-      )
-    }
     const composed = composeSignal(request.signal, request.timeoutMs)
     try {
-      const response = await this.api.nativeFetch(request.url, {
-        method: request.method,
-        headers: { ...request.headers },
-        ...(request.body === undefined ? {} : { body: request.body }),
-        signal: composed.signal,
-        logFetch: false,
-        requestTimeoutMs: request.timeoutMs,
-        networkRoute: request.networkRoute,
-      })
-      return {
-        ok: response.ok,
-        status: response.status,
-        headers: response.headers,
-        bodyText: await response.text(),
+      let isHostedWeb = false
+      try {
+        isHostedWeb = request.networkRoute === "local_network"
+          && await this.isHostedWeb(composed.signal)
+      } catch {
+        throwRequestError(request, composed)
       }
-    } catch {
-      if (request.signal?.aborted) throw new LlmError("ABORTED", "LLM request was cancelled.")
-      if (composed.timedOut()) throw new LlmError("TIMEOUT", "LLM request timed out.")
-      throw new LlmError("NETWORK_ERROR", "LLM network request failed.")
+      if (isHostedWeb) {
+        throw new LlmError(
+          "UNSUPPORTED_RUNTIME",
+          "Local network endpoints are unavailable in the hosted web runtime.",
+        )
+      }
+      try {
+        const response = await this.api.nativeFetch(request.url, {
+          method: request.method,
+          headers: { ...request.headers },
+          ...(request.body === undefined ? {} : { body: request.body }),
+          signal: composed.signal,
+          logFetch: false,
+          requestTimeoutMs: request.timeoutMs,
+          networkRoute: request.networkRoute,
+        })
+        return {
+          ok: response.ok,
+          status: response.status,
+          headers: response.headers,
+          bodyText: await response.text(),
+        }
+      } catch {
+        throwRequestError(request, composed)
+      }
     } finally {
       composed.cleanup()
     }
   }
 
-  private async isHostedWeb(): Promise<boolean> {
+  private async isHostedWeb(signal: AbortSignal): Promise<boolean> {
     try {
-      const runtime = await this.api.getRuntimeInfo?.()
+      const runtimeInfo = this.api.getRuntimeInfo?.()
+      if (!runtimeInfo) return false
+      const runtime = await awaitWithSignal(runtimeInfo, signal)
       return runtime?.platform.toLowerCase() === "web"
-    } catch {
+    } catch (error) {
+      if (signal.aborted) throw error
       return false
     }
   }

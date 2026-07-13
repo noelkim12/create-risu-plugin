@@ -25,6 +25,53 @@ describe("NativeFetchTransport", () => {
     expect(nativeFetch).not.toHaveBeenCalled()
   })
 
+  it("honors caller abort while hosted-web runtime detection is stalled", async () => {
+    const nativeFetch = vi.fn()
+    const transport = new NativeFetchTransport({
+      nativeFetch,
+      getRuntimeInfo: vi.fn(() => new Promise(() => {})),
+    })
+    const caller = new AbortController()
+
+    const request = transport.request({
+      url: "http://127.0.0.1:11434/v1/chat/completions",
+      method: "POST",
+      headers: {},
+      signal: caller.signal,
+      timeoutMs: 60_000,
+      networkRoute: "local_network",
+    })
+    caller.abort()
+
+    await expect(Promise.race([
+      request,
+      new Promise(resolve => setTimeout(() => resolve("runtime lookup stalled"), 100)),
+    ])).rejects.toMatchObject<LlmError>({ code: "ABORTED" })
+    expect(nativeFetch).not.toHaveBeenCalled()
+  })
+
+  it("honors wrapper timeout while hosted-web runtime detection is stalled", async () => {
+    const nativeFetch = vi.fn()
+    const transport = new NativeFetchTransport({
+      nativeFetch,
+      getRuntimeInfo: vi.fn(() => new Promise(() => {})),
+    })
+
+    const request = transport.request({
+      url: "http://127.0.0.1:11434/v1/chat/completions",
+      method: "POST",
+      headers: {},
+      timeoutMs: 1,
+      networkRoute: "local_network",
+    })
+
+    await expect(Promise.race([
+      request,
+      new Promise(resolve => setTimeout(() => resolve("runtime lookup stalled"), 100)),
+    ])).rejects.toMatchObject<LlmError>({ code: "TIMEOUT" })
+    expect(nativeFetch).not.toHaveBeenCalled()
+  })
+
   it("forces secret-safe logging, timeout, abort, and local routing options", async () => {
     const nativeFetch = vi.fn().mockResolvedValue(new Response('{"ok":true}', {
       status: 200,
