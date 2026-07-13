@@ -1165,6 +1165,23 @@ interface ProviderOptions {
 // ============================================================================
 
 /**
+ * Options supported by Risu's native network transport.
+ *
+ * Credential-bearing calls should set `logFetch` to `false` so request and
+ * response data are not added to Risu's user-visible fetch log.
+ */
+interface RisuNativeFetchOptions extends RequestInit {
+    /** Whether Risu records this request in its fetch log. Defaults to true. */
+    logFetch?: boolean;
+
+    /** Positive request timeout in milliseconds. */
+    requestTimeoutMs?: number;
+
+    /** Route local/private URLs through a runtime that can reach the local network. */
+    networkRoute?: 'auto' | 'local_network';
+}
+
+/**
  * Risuai Plugin API v3.0
  *
  * All methods are accessed through the global `risuai` object.
@@ -1463,12 +1480,12 @@ interface RisuaiPluginAPI {
     // ========== Network APIs ==========
 
     /**
-     * Makes a native fetch request (bypasses Risuai networking)
-     * @param url - Request URL
-     * @param options - Fetch options
+     * Makes a native fetch request through the Risu host network transport.
+     * @param url - Absolute request URL
+     * @param options - Native transport options
      * @returns Response promise
      */
-    nativeFetch(url: string, options?: RequestInit): Promise<Response>;
+    nativeFetch(url: string, options?: RisuNativeFetchOptions): Promise<Response>;
 
     /**
      * Saves a secret header for network requests, for protected Headers (like Authorization) that are stripped by Risuai for security.

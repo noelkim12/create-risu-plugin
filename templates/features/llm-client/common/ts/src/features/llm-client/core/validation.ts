@@ -1,5 +1,6 @@
 import { LlmError } from "./errors"
 import { PROVIDER_IDS } from "./types"
+import { validateEndpointUrl } from "../network/url-policy"
 import type {
   LlmCallOptions,
   LlmRequest,
@@ -135,26 +136,6 @@ export function parseStoredSettings(value: unknown): LlmSettings {
   return value as LlmSettings
 }
 
-function isLoopback(hostname: string): boolean {
-  return hostname === "localhost"
-    || hostname === "127.0.0.1"
-    || hostname === "[::1]"
-    || hostname === "::1"
-}
-
-function validateBaseUrl(value: string): string | null {
-  try {
-    const url = new URL(value)
-    if (url.username || url.password) return "URL credentials are not allowed."
-    if (url.hash || url.search) return "Base URL cannot contain a query or fragment."
-    if (url.protocol === "https:") return null
-    if (url.protocol === "http:" && isLoopback(url.hostname)) return null
-    return "Use HTTPS, except for a loopback HTTP endpoint."
-  } catch {
-    return "Enter a valid absolute URL."
-  }
-}
-
 export function validateProviderConfig(config: ProviderConfig): FieldErrors {
   const errors: Record<string, string> = {}
   if (config.model.trim() === "") errors.model = "Model is required."
@@ -174,7 +155,7 @@ export function validateProviderConfig(config: ProviderConfig): FieldErrors {
   }
 
   if (config.provider === "openai-compatible" || config.provider === "ollama") {
-    const error = validateBaseUrl(config.baseUrl)
+    const error = validateEndpointUrl(config.baseUrl)
     if (error) errors.baseUrl = error
   }
   if (config.provider === "openai-compatible") {
