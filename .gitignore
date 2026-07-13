@@ -43,6 +43,7 @@ build/
 tmp/
 temp/
 .cache/
+.worktrees/
 
 # Test
 coverage/
