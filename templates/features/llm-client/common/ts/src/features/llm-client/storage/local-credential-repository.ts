@@ -123,6 +123,16 @@ export class LocalCredentialRepository {
     return (await this.load(config)) !== null
   }
 
+  async status(config: ProviderConfig): Promise<"missing" | "stored" | "stale"> {
+    const storage = await this.storageFactory()
+    const slot = credentialSlotFor(config)
+    const record = await storage.getItem<unknown>(credentialKey(slot, this.pluginName))
+    if (record === null) return "missing"
+    return isStoredCredential(record, slot) && record.audience === credentialAudienceFor(config)
+      ? "stored"
+      : "stale"
+  }
+
   private async save(config: ProviderConfig, secret: Record<string, string>): Promise<void> {
     const slot = credentialSlotFor(config)
     const record = createCredentialRecord(config, secret, this.revision(), this.now())

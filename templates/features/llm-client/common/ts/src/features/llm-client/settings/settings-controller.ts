@@ -1,0 +1,412 @@
+import { LlmError } from "../core/errors"
+import type {
+  CredentialDraft,
+  LlmSettings,
+  ProviderConfig,
+  ProviderId,
+  StoredCredential,
+} from "../core/types"
+import {
+  assertValidProviderConfig,
+  createDefaultSettings,
+  validateCustomHeaderNames,
+  validateProviderConfig,
+  type FieldErrors,
+} from "../core/validation"
+import {
+  createCredentialRecord,
+  parseServiceAccountJson,
+} from "../storage/local-credential-repository"
+
+export type SettingsOperation = "idle" | "loading" | "saving" | "testing" | "success" | "error"
+export type CredentialState = "missing" | "stored" | "stale"
+
+export interface SettingsState {
+  readonly operation: SettingsOperation
+  readonly settings: LlmSettings
+  readonly activeConfig: ProviderConfig
+  readonly credentialState: CredentialState
+  readonly dirty: boolean
+  readonly fieldErrors: FieldErrors
+  readonly statusMessage: string
+  readonly runtimePlatform: "web" | "tauri" | "node"
+}
+
+type Listener = (state: SettingsState) => void
+
+export function parseCustomHeaders(value: string): Record<string, string> {
+  if (value.trim() === "") return {}
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    throw new LlmError("CONFIG_INVALID", "Custom headers must be valid JSON.")
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new LlmError("CONFIG_INVALID", "Custom headers must be a JSON object.")
+  }
+
+  const entries = Object.entries(parsed)
+  const error = validateCustomHeaderNames(entries.map(([name]) => name.trim()))
+  if (error) throw new LlmError("CONFIG_INVALID", error)
+  const result: Record<string, string> = {}
+  for (const [rawName, rawValue] of entries) {
+    const name = rawName.trim()
+    if (typeof rawValue !== "string") {
+      throw new LlmError("CONFIG_INVALID", `Custom header ${name} must have a string value.`)
+    }
+    if (/[\r\n]/.test(rawValue)) {
+      throw new LlmError("CONFIG_INVALID", `Custom header ${name} cannot contain a line break.`)
+    }
+    result[name] = rawValue
+  }
+  return result
+}
+
+export interface SettingsRepositoryPort {
+  load(): Promise<LlmSettings>
+  save(settings: LlmSettings): Promise<void>
+}
+
+export interface CredentialRepositoryPort {
+  load(config: ProviderConfig): Promise<StoredCredential | null>
+  status(config: ProviderConfig): Promise<CredentialState>
+  saveApiKey(
+    config: ProviderConfig,
+    apiKey: string,
+    customHeaders: Readonly<Record<string, string>>,
+  ): Promise<void>
+  saveServiceAccountJson(config: Extract<ProviderConfig, { provider: "google-vertex" }>, value: string): Promise<void>
+  clear(config: ProviderConfig): Promise<void>
+  clearProvider(provider: ProviderId): Promise<void>
+}
+
+export interface ConnectionTestPort {
+  testConnection(
+    config: ProviderConfig,
+    credential: StoredCredential | null,
+    signal?: AbortSignal,
+  ): Promise<{ readonly provider: ProviderId; readonly model: string }>
+}
+
+function withProviderConfig(settings: LlmSettings, config: ProviderConfig): LlmSettings {
+  switch (config.provider) {
+    case "google-ai-studio":
+      return { ...settings, providers: { ...settings.providers, "google-ai-studio": config } }
+    case "google-vertex":
+      return { ...settings, providers: { ...settings.providers, "google-vertex": config } }
+    case "openai-compatible":
+      return { ...settings, providers: { ...settings.providers, "openai-compatible": config } }
+    case "ollama":
+      return { ...settings, providers: { ...settings.providers, ollama: config } }
+  }
+}
+
+export class LlmSettingsController {
+  private readonly listeners = new Set<Listener>()
+  private secretDraft: CredentialDraft = {}
+  private testAbort: AbortController | null = null
+  private state: SettingsState = {
+    operation: "idle",
+    settings: createDefaultSettings(),
+    activeConfig: createDefaultSettings().providers["google-ai-studio"],
+    credentialState: "missing",
+    dirty: false,
+    fieldErrors: {},
+    statusMessage: "",
+    runtimePlatform: "web",
+  }
+
+  constructor(
+    private readonly settingsRepository: SettingsRepositoryPort,
+    private readonly credentialRepository: CredentialRepositoryPort,
+    private readonly client: ConnectionTestPort,
+    private readonly getRuntimeInfo: () => Promise<{ platform: string }> = () => risuai.getRuntimeInfo(),
+    private readonly invalidateAuthCaches: () => void = () => undefined,
+  ) {}
+
+  subscribe(listener: Listener): () => void {
+    this.listeners.add(listener)
+    listener(this.state)
+    return () => this.listeners.delete(listener)
+  }
+
+  private publish(patch: Partial<SettingsState>): void {
+    this.state = { ...this.state, ...patch }
+    for (const listener of this.listeners) listener(this.state)
+  }
+
+  private activeConfig(settings = this.state.settings): ProviderConfig {
+    return settings.providers[settings.activeProvider]
+  }
+
+  async load(): Promise<void> {
+    this.publish({ operation: "loading", statusMessage: "Loading LLM settings…" })
+    try {
+      const [settings, runtime] = await Promise.all([
+        this.settingsRepository.load(),
+        this.getRuntimeInfo(),
+      ])
+      const activeConfig = this.activeConfig(settings)
+      this.publish({
+        operation: "idle",
+        settings,
+        activeConfig,
+        credentialState: await this.credentialRepository.status(activeConfig),
+        dirty: false,
+        fieldErrors: validateProviderConfig(activeConfig),
+        statusMessage: "",
+        runtimePlatform: runtime.platform === "tauri"
+          ? "tauri"
+          : runtime.platform === "node"
+            ? "node"
+            : "web",
+      })
+    } catch (error) {
+      this.publish({
+        operation: "error",
+        statusMessage: error instanceof LlmError ? error.message : "Settings failed to load.",
+      })
+    }
+  }
+
+  selectProvider(provider: ProviderId): void {
+    const settings = { ...this.state.settings, activeProvider: provider }
+    const activeConfig = settings.providers[provider]
+    this.secretDraft = {}
+    this.publish({
+      settings,
+      activeConfig,
+      dirty: true,
+      fieldErrors: validateProviderConfig(activeConfig),
+      statusMessage: "",
+    })
+    void this.credentialRepository.status(activeConfig).then(credentialState => {
+      if (this.state.activeConfig === activeConfig) this.publish({ credentialState })
+    })
+  }
+
+  updateConfig(config: ProviderConfig): void {
+    if (
+      this.state.activeConfig.provider === "google-vertex"
+      && config.provider === "google-vertex"
+      && this.state.activeConfig.authMode !== config.authMode
+    ) {
+      this.secretDraft = {}
+    }
+    const settings = withProviderConfig(this.state.settings, config)
+    this.publish({
+      settings,
+      activeConfig: config,
+      dirty: true,
+      fieldErrors: validateProviderConfig(config),
+      statusMessage: "",
+    })
+    void this.credentialRepository.status(config).then(credentialState => {
+      if (this.state.activeConfig === config) this.publish({ credentialState })
+    })
+  }
+
+  setSecretDraft(draft: CredentialDraft): void {
+    this.secretDraft = { ...this.secretDraft, ...draft }
+    this.publish({ dirty: true, statusMessage: "" })
+  }
+
+  private safeMessage(error: unknown, fallback: string): string {
+    return error instanceof LlmError ? error.message : fallback
+  }
+
+  private configWithDraftHeaders(): {
+    readonly config: ProviderConfig
+    readonly customHeaders: Record<string, string> | null
+  } {
+    const config = this.state.activeConfig
+    if (
+      config.provider !== "openai-compatible"
+      || this.secretDraft.customHeadersJson === undefined
+      || this.secretDraft.customHeadersJson.trim() === ""
+    ) {
+      return { config, customHeaders: null }
+    }
+    const customHeaders = parseCustomHeaders(this.secretDraft.customHeadersJson)
+    return {
+      config: { ...config, customHeaderNames: Object.keys(customHeaders) },
+      customHeaders,
+    }
+  }
+
+  private async draftCredential(
+    config: ProviderConfig,
+    customHeaders: Record<string, string> | null,
+  ): Promise<StoredCredential | null> {
+    const stored = await this.credentialRepository.load(config)
+    const apiKey = this.secretDraft.apiKey?.trim() ?? ""
+    const serviceAccountJson = this.secretDraft.serviceAccountJson?.trim() ?? ""
+
+    if (config.provider === "google-vertex" && config.authMode === "service-account") {
+      return serviceAccountJson === ""
+        ? stored
+        : createCredentialRecord(config, parseServiceAccountJson(serviceAccountJson, config))
+    }
+    if (config.provider === "openai-compatible" && (customHeaders !== null || apiKey !== "")) {
+      const headers = customHeaders ?? Object.fromEntries(
+        config.customHeaderNames
+          .map(name => [name, stored?.secret[name]] as const)
+          .filter((entry): entry is readonly [string, string] => typeof entry[1] === "string"),
+      )
+      return createCredentialRecord(config, {
+        ...headers,
+        apiKey: apiKey || stored?.secret.apiKey || "",
+      })
+    }
+    if (apiKey !== "") {
+      return createCredentialRecord(config, { apiKey })
+    }
+    return stored
+  }
+
+  async save(): Promise<void> {
+    this.publish({ operation: "saving", statusMessage: "Saving locally…" })
+    try {
+      const { config, customHeaders } = this.configWithDraftHeaders()
+      this.publish({ fieldErrors: validateProviderConfig(config) })
+      assertValidProviderConfig(config)
+      const settings = withProviderConfig(this.state.settings, config)
+      await this.settingsRepository.save(settings)
+
+      const apiKey = this.secretDraft.apiKey?.trim() ?? ""
+      const serviceAccountJson = this.secretDraft.serviceAccountJson?.trim() ?? ""
+      if (config.provider === "google-vertex" && config.authMode === "service-account") {
+        if (serviceAccountJson !== "") {
+          await this.credentialRepository.saveServiceAccountJson(config, serviceAccountJson)
+        }
+      } else if (config.provider === "openai-compatible") {
+        if (apiKey !== "" || customHeaders !== null) {
+          const stored = await this.credentialRepository.load(config)
+          const preservedHeaders = customHeaders ?? Object.fromEntries(
+            config.customHeaderNames
+              .map(name => [name, stored?.secret[name]] as const)
+              .filter((entry): entry is readonly [string, string] => typeof entry[1] === "string"),
+          )
+          await this.credentialRepository.saveApiKey(
+            config,
+            apiKey || stored?.secret.apiKey || "",
+            preservedHeaders,
+          )
+        }
+      } else if (apiKey !== "") {
+        await this.credentialRepository.saveApiKey(config, apiKey, {})
+      }
+      if (config.provider === "google-vertex") this.invalidateAuthCaches()
+
+      this.secretDraft = {}
+      this.publish({
+        operation: "success",
+        settings,
+        activeConfig: config,
+        credentialState: await this.credentialRepository.status(config),
+        dirty: false,
+        fieldErrors: {},
+        statusMessage: "Saved locally.",
+      })
+    } catch (error) {
+      this.publish({
+        operation: "error",
+        statusMessage: this.safeMessage(error, "LLM settings could not be saved."),
+      })
+    }
+  }
+
+  async testConnection(): Promise<void> {
+    this.cancelTest()
+    const abort = new AbortController()
+    this.testAbort = abort
+    this.publish({ operation: "testing", statusMessage: "Testing connection…" })
+    try {
+      const { config, customHeaders } = this.configWithDraftHeaders()
+      this.publish({ fieldErrors: validateProviderConfig(config) })
+      assertValidProviderConfig(config)
+      const credential = await this.draftCredential(config, customHeaders)
+      if (this.testAbort !== abort || abort.signal.aborted) return
+      const response = await this.client.testConnection(config, credential, abort.signal)
+      if (this.testAbort !== abort) return
+      this.testAbort = null
+      this.publish({
+        operation: "success",
+        statusMessage: `Connected to ${response.provider} / ${response.model}.`,
+      })
+    } catch (error) {
+      if (this.testAbort !== abort) return
+      const cancelled = error instanceof LlmError && error.code === "ABORTED"
+      this.testAbort = null
+      this.publish({
+        operation: cancelled ? "idle" : "error",
+        statusMessage: cancelled
+          ? "Connection test cancelled."
+          : this.safeMessage(error, "Connection test failed."),
+      })
+    }
+  }
+
+  cancelTest(): void {
+    const active = this.testAbort
+    active?.abort()
+    this.testAbort = null
+    if (active) this.publish({ operation: "idle", statusMessage: "Connection test cancelled." })
+  }
+
+  async clearCredential(): Promise<void> {
+    this.cancelTest()
+    this.publish({ operation: "saving", statusMessage: "Removing credential…" })
+    try {
+      await this.credentialRepository.clear(this.state.activeConfig)
+      if (this.state.activeConfig.provider === "google-vertex") this.invalidateAuthCaches()
+      this.secretDraft = {}
+      this.publish({
+        operation: "success",
+        credentialState: "missing",
+        statusMessage: "Credential removed.",
+      })
+    } catch (error) {
+      this.publish({
+        operation: "error",
+        statusMessage: this.safeMessage(error, "Credential could not be removed."),
+      })
+    }
+  }
+
+  async resetActiveProvider(): Promise<void> {
+    this.cancelTest()
+    this.publish({ operation: "saving", statusMessage: "Resetting provider…" })
+    try {
+      const defaults = createDefaultSettings()
+      const provider = this.state.settings.activeProvider
+      const config = defaults.providers[provider]
+      const settings = withProviderConfig(this.state.settings, config)
+      await this.credentialRepository.clearProvider(provider)
+      if (provider === "google-vertex") this.invalidateAuthCaches()
+      await this.settingsRepository.save(settings)
+      this.secretDraft = {}
+      this.publish({
+        operation: "success",
+        settings,
+        activeConfig: config,
+        credentialState: "missing",
+        dirty: false,
+        fieldErrors: validateProviderConfig(config),
+        statusMessage: "Provider reset.",
+      })
+    } catch (error) {
+      this.publish({
+        operation: "error",
+        statusMessage: this.safeMessage(error, "Provider could not be reset."),
+      })
+    }
+  }
+
+  dispose(): void {
+    this.cancelTest()
+    this.secretDraft = {}
+    this.listeners.clear()
+  }
+}

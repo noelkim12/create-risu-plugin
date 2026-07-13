@@ -6,6 +6,7 @@ import { GoogleVertexProvider } from "./providers/google-vertex"
 import { OllamaProvider } from "./providers/ollama"
 import { OpenAiCompatibleProvider } from "./providers/openai-compatible"
 import { ProviderRegistry } from "./providers/registry"
+import { LlmSettingsController } from "./settings/settings-controller"
 import { LocalCredentialRepository } from "./storage/local-credential-repository"
 import { LocalSettingsRepository } from "./storage/local-settings-repository"
 import type { LocalStoragePort } from "./storage/storage-keys"
@@ -15,24 +16,38 @@ export interface LlmRisuApi extends NativeFetchApi {
   getRuntimeInfo(): Promise<{ readonly platform: string }>
 }
 
-export function createLlmClient(api: LlmRisuApi = risuai): LlmClient {
+function assembleRuntime(api: LlmRisuApi) {
   const transport = new NativeFetchTransport(api)
-  const tokens = new GoogleServiceAccountTokenProvider(transport)
+  const tokenProvider = new GoogleServiceAccountTokenProvider(transport)
   const storageFactory = () => api.getLocalPluginStorage()
-  const settings = new LocalSettingsRepository(storageFactory)
-  const credentials = new LocalCredentialRepository(storageFactory)
+  const settingsRepository = new LocalSettingsRepository(storageFactory)
+  const credentialRepository = new LocalCredentialRepository(storageFactory)
   const providers = new ProviderRegistry({
     "google-ai-studio": new GoogleAiStudioProvider(transport),
-    "google-vertex": new GoogleVertexProvider(transport, tokens),
+    "google-vertex": new GoogleVertexProvider(transport, tokenProvider),
     "openai-compatible": new OpenAiCompatibleProvider(transport),
     ollama: new OllamaProvider(transport),
   })
-  return new LlmClient({
-    settings,
-    credentials,
+  const client = new LlmClient({
+    settings: settingsRepository,
+    credentials: credentialRepository,
     providers,
     getRuntimeInfo: () => api.getRuntimeInfo(),
   })
+  const controller = new LlmSettingsController(
+    settingsRepository,
+    credentialRepository,
+    client,
+    () => api.getRuntimeInfo(),
+    () => tokenProvider.invalidate(),
+  )
+  return { client, controller }
 }
 
-export const llmClient = createLlmClient()
+export function createLlmClient(api: LlmRisuApi = risuai): LlmClient {
+  return assembleRuntime(api).client
+}
+
+const defaultRuntime = assembleRuntime(risuai)
+export const llmClient = defaultRuntime.client
+export const llmSettingsController = defaultRuntime.controller

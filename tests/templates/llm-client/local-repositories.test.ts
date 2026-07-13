@@ -104,6 +104,32 @@ describe("device-local LLM repositories", () => {
       .resolves.toBeNull()
   })
 
+  it("distinguishes missing, stored, and stale audience-bound credentials", async () => {
+    const storage = new MemoryLocalStorage()
+    const credentials = new LocalCredentialRepository(
+      () => Promise.resolve(storage),
+      "sample-plugin",
+      () => "revision-1",
+      () => 1234,
+    )
+    const config = {
+      ...createDefaultSettings().providers["openai-compatible"],
+      model: "test-model",
+      baseUrl: "https://llm.example/v1",
+    }
+
+    await expect(credentials.status(config)).resolves.toBe("missing")
+    await credentials.saveApiKey(config, "secret-key", {})
+    await expect(credentials.status(config)).resolves.toBe("stored")
+    await expect(credentials.status({ ...config, baseUrl: "https://other.example/v1" }))
+      .resolves.toBe("stale")
+
+    storage.values.set("sample-plugin:llm-client:credential:openai-compatible:v1", {
+      schemaVersion: 0,
+    })
+    await expect(credentials.status(config)).resolves.toBe("stale")
+  })
+
   it("clears only the active credential key", async () => {
     const storage = new MemoryLocalStorage()
     storage.values.set("another-plugin:data", "preserve")
