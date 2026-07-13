@@ -16,7 +16,7 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: path.join(root, "templates/features/llm-client/common/ts/src/constants/plugin"),
+        find: /^\.\.\/\.\.\/\.\.\/constants\/plugin$/,
         replacement: path.join(root, "templates/frameworks/vanilla/ts/src/constants/plugin.ts"),
       },
       ...["core", "network", "settings", "storage"].map(directory => ({
