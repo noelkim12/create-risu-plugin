@@ -2,10 +2,32 @@ import { describe, expect, it } from "vitest"
 
 import { MemoryLocalStorage } from "../../helpers/memory-local-storage"
 import { createDefaultSettings } from "../../../templates/features/llm-client/common/ts/src/features/llm-client/core/validation"
-import { LocalCredentialRepository } from "../../../templates/features/llm-client/common/ts/src/features/llm-client/storage/local-credential-repository"
+import {
+  createCredentialRecord,
+  LocalCredentialRepository,
+} from "../../../templates/features/llm-client/common/ts/src/features/llm-client/storage/local-credential-repository"
 import { LocalSettingsRepository } from "../../../templates/features/llm-client/common/ts/src/features/llm-client/storage/local-settings-repository"
 
 describe("device-local LLM repositories", () => {
+  it("builds audience-bound ephemeral credentials with an explicit revision", () => {
+    const config = {
+      ...createDefaultSettings().providers["google-vertex"],
+      authMode: "service-account" as const,
+      projectId: "project-a",
+      model: "gemini-test",
+    }
+
+    expect(createCredentialRecord(config, { clientEmail: "service@example.com" }, "revision-2", 2345))
+      .toEqual({
+        schemaVersion: 1,
+        slot: "google-vertex-service-account",
+        audience: "vertex:project-a:us-central1",
+        revision: "revision-2",
+        updatedAt: 2345,
+        secret: { clientEmail: "service@example.com" },
+      })
+  })
+
   it("persists settings under a plugin-namespaced versioned key", async () => {
     const storage = new MemoryLocalStorage()
     const repository = new LocalSettingsRepository(() => Promise.resolve(storage), "sample-plugin")

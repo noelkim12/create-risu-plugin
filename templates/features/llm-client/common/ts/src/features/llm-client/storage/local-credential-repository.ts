@@ -32,6 +32,22 @@ export function credentialAudienceFor(config: ProviderConfig): string {
   }
 }
 
+export function createCredentialRecord(
+  config: ProviderConfig,
+  secret: Record<string, string>,
+  revision = crypto.randomUUID(),
+  updatedAt = Date.now(),
+): StoredCredential {
+  return {
+    schemaVersion: 1,
+    slot: credentialSlotFor(config),
+    audience: credentialAudienceFor(config),
+    revision,
+    updatedAt,
+    secret,
+  }
+}
+
 function isStoredCredential(value: unknown, slot: CredentialSlot): value is StoredCredential {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
@@ -109,14 +125,7 @@ export class LocalCredentialRepository {
 
   private async save(config: ProviderConfig, secret: Record<string, string>): Promise<void> {
     const slot = credentialSlotFor(config)
-    const record: StoredCredential = {
-      schemaVersion: 1,
-      slot,
-      audience: credentialAudienceFor(config),
-      revision: this.revision(),
-      updatedAt: this.now(),
-      secret,
-    }
+    const record = createCredentialRecord(config, secret, this.revision(), this.now())
     const storage = await this.storageFactory()
     await storage.setItem(credentialKey(slot, this.pluginName), record)
   }
