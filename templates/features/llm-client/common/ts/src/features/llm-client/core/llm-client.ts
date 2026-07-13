@@ -1,5 +1,9 @@
 import { isLocalNetworkUrl } from "../network/url-policy"
 import type { LlmProvider } from "../providers/provider"
+import {
+  credentialAudienceFor,
+  credentialSlotFor,
+} from "../storage/local-credential-repository"
 import { LlmError } from "./errors"
 import type {
   LlmCallOptions,
@@ -20,6 +24,23 @@ export interface LlmClientDependencies {
   readonly credentials: { load(config: ProviderConfig): Promise<StoredCredential | null> }
   readonly providers: { for(config: ProviderConfig): LlmProvider }
   readonly getRuntimeInfo: () => Promise<{ readonly platform: string }>
+}
+
+function assertCredentialCompatible(
+  config: ProviderConfig,
+  credential: StoredCredential | null,
+): void {
+  if (credential === null) return
+  if (
+    credential.slot !== credentialSlotFor(config)
+    || credential.audience !== credentialAudienceFor(config)
+  ) {
+    throw new LlmError(
+      "CREDENTIAL_MISSING",
+      "No credential is stored for this provider configuration.",
+      config.provider,
+    )
+  }
 }
 
 export class LlmClient {
@@ -59,6 +80,7 @@ export class LlmClient {
     request: LlmRequest,
     options: LlmCallOptions,
   ): Promise<LlmResponse> {
+    assertCredentialCompatible(config, credential)
     if (
       (config.provider === "openai-compatible" || config.provider === "ollama")
       && isLocalNetworkUrl(config.baseUrl)

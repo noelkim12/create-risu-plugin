@@ -96,7 +96,43 @@ describe("LlmClient", () => {
     }))
   })
 
+  it("rejects a credential bound to a different audience before provider execution", async () => {
+    const config = {
+      ...settings.providers["openai-compatible"],
+      baseUrl: "https://endpoint-b.example/v1",
+      model: "model-b",
+    }
+    await expect(client.testConnection(
+      config,
+      {
+        ...storedCredential,
+        slot: "openai-compatible",
+        audience: "https://endpoint-a.example/v1/chat/completions",
+      },
+    )).rejects.toMatchObject({
+      code: "CREDENTIAL_MISSING",
+      provider: "openai-compatible",
+    })
+
+    expect(registry.for).not.toHaveBeenCalled()
+    expect(provider.complete).not.toHaveBeenCalled()
+  })
+
+  it("rejects a credential from a different slot before provider execution", async () => {
+    await expect(client.testConnection(
+      settings.providers["google-ai-studio"],
+      { ...storedCredential, slot: "openai-compatible" },
+    )).rejects.toMatchObject({
+      code: "CREDENTIAL_MISSING",
+      provider: "google-ai-studio",
+    })
+
+    expect(registry.for).not.toHaveBeenCalled()
+    expect(provider.complete).not.toHaveBeenCalled()
+  })
+
   it("rejects local endpoints from a hosted web runtime", async () => {
+    credentialReader.load.mockResolvedValueOnce(null)
     getRuntimeInfo.mockResolvedValueOnce({ platform: "web" })
     await expect(client.complete(
       { messages: [{ role: "user", content: "hello" }] },
