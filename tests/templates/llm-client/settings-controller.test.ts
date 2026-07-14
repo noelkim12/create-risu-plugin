@@ -260,7 +260,11 @@ describe("LlmSettingsController", () => {
     settingsSave.resolve()
     await staleSave
 
-    expect(harness.credentials.saveApiKey).not.toHaveBeenCalled()
+    expect(harness.credentials.saveApiKey).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "google-ai-studio" }),
+      "studio-draft",
+      {},
+    )
     expect(harness.state()).toMatchObject({
       activeConfig: { provider: "ollama" },
       dirty: true,
@@ -269,11 +273,147 @@ describe("LlmSettingsController", () => {
     })
 
     await harness.controller.save()
-    expect(harness.credentials.saveApiKey).toHaveBeenCalledWith(
+    expect(harness.credentials.saveApiKey).toHaveBeenLastCalledWith(
       expect.objectContaining({ provider: "ollama" }),
       "ollama-draft",
       {},
     )
+    expect(harness.credentials.saveApiKey).toHaveBeenCalledTimes(2)
+  })
+
+  it("serializes Save then Clear when the credential save finishes late", async () => {
+    const harness = createHarness()
+    await harness.controller.load()
+    let credentialStored = true
+    const credentialSave = deferred<void>()
+    harness.credentials.saveApiKey.mockImplementationOnce(async () => {
+      await credentialSave.promise
+      credentialStored = true
+    })
+    harness.credentials.clear.mockImplementationOnce(async () => {
+      credentialStored = false
+    })
+    harness.credentials.status.mockImplementation(async () => (
+      credentialStored ? "stored" as const : "missing" as const
+    ))
+
+    harness.controller.setSecretDraft({ apiKey: "replacement" })
+    const save = harness.controller.save()
+    await vi.waitFor(() => expect(harness.credentials.saveApiKey).toHaveBeenCalledOnce())
+    const clear = harness.controller.clearCredential()
+
+    expect(harness.credentials.clear).not.toHaveBeenCalled()
+    credentialSave.resolve()
+    await Promise.all([save, clear])
+
+    expect(credentialStored).toBe(false)
+    expect(harness.state().credentialState).toBe("missing")
+  })
+
+  it("serializes Clear then Save when the credential clear finishes late", async () => {
+    const harness = createHarness()
+    await harness.controller.load()
+    let credentialStored = true
+    const credentialClear = deferred<void>()
+    harness.credentials.clear.mockImplementationOnce(async () => {
+      await credentialClear.promise
+      credentialStored = false
+    })
+    harness.credentials.saveApiKey.mockImplementationOnce(async () => {
+      credentialStored = true
+    })
+    harness.credentials.status.mockImplementation(async () => (
+      credentialStored ? "stored" as const : "missing" as const
+    ))
+
+    const clear = harness.controller.clearCredential()
+    await vi.waitFor(() => expect(harness.credentials.clear).toHaveBeenCalledOnce())
+    harness.controller.setSecretDraft({ apiKey: "newer-secret" })
+    const save = harness.controller.save()
+
+    expect(harness.settings.save).not.toHaveBeenCalled()
+    credentialClear.resolve()
+    await Promise.all([clear, save])
+
+    expect(credentialStored).toBe(true)
+    expect(harness.state().credentialState).toBe("stored")
+  })
+
+  it("finishes a queued Reset before a newer Save", async () => {
+    const harness = createHarness()
+    await harness.controller.load()
+    let credentialStored = true
+    const providerClear = deferred<void>()
+    harness.credentials.clearProvider.mockImplementationOnce(async () => {
+      await providerClear.promise
+      credentialStored = false
+    })
+    harness.credentials.saveApiKey.mockImplementationOnce(async () => {
+      credentialStored = true
+    })
+    harness.credentials.status.mockImplementation(async () => (
+      credentialStored ? "stored" as const : "missing" as const
+    ))
+
+    const reset = harness.controller.resetActiveProvider()
+    await vi.waitFor(() => expect(harness.credentials.clearProvider).toHaveBeenCalledOnce())
+    harness.controller.updateConfig({
+      ...harness.state().activeConfig,
+      model: "newer-model",
+    })
+    harness.controller.setSecretDraft({ apiKey: "newer-secret" })
+    const save = harness.controller.save()
+
+    expect(harness.settings.save).not.toHaveBeenCalled()
+    providerClear.resolve()
+    await Promise.all([reset, save])
+
+    expect(harness.settings.save).toHaveBeenCalledTimes(2)
+    expect(harness.settings.save.mock.calls[0]?.[0]).toMatchObject({
+      providers: { "google-ai-studio": createDefaultSettings().providers["google-ai-studio"] },
+    })
+    expect(harness.settings.save.mock.calls[1]?.[0]).toMatchObject({
+      providers: { "google-ai-studio": { model: "newer-model" } },
+    })
+    expect(credentialStored).toBe(true)
+    expect(harness.state()).toMatchObject({
+      activeConfig: { model: "newer-model" },
+      credentialState: "stored",
+      statusMessage: "Saved locally.",
+    })
+  })
+
+  it("refreshes credential status after a stale destructive action finishes", async () => {
+    const harness = createHarness()
+    await harness.controller.load()
+    let credentialStored = true
+    const credentialClear = deferred<void>()
+    harness.credentials.clear.mockImplementationOnce(async () => {
+      await credentialClear.promise
+      credentialStored = false
+    })
+    harness.credentials.status.mockImplementation(async () => (
+      credentialStored ? "stored" as const : "missing" as const
+    ))
+
+    const clear = harness.controller.clearCredential()
+    await vi.waitFor(() => expect(harness.credentials.clear).toHaveBeenCalledOnce())
+    harness.controller.updateConfig({
+      ...harness.state().activeConfig,
+      model: "edited-while-clearing",
+    })
+    await vi.waitFor(() => expect(harness.state().credentialState).toBe("stored"))
+
+    credentialClear.resolve()
+    await clear
+    await vi.waitFor(() => expect(harness.state().credentialState).toBe("missing"))
+    expect(credentialStored).toBe(false)
+    expect(harness.state()).toMatchObject({
+      activeConfig: { model: "edited-while-clearing" },
+      dirty: true,
+      operation: "idle",
+      statusMessage: "",
+    })
   })
 
   it("does not test a newer audience or draft through an older credential load", async () => {
@@ -375,7 +515,11 @@ describe("LlmSettingsController", () => {
     })
     clearProvider.resolve()
     await staleReset
-    expect(resetHarness.settings.save).not.toHaveBeenCalled()
+    expect(resetHarness.settings.save).toHaveBeenCalledWith(expect.objectContaining({
+      providers: expect.objectContaining({
+        "google-ai-studio": createDefaultSettings().providers["google-ai-studio"],
+      }),
+    }))
     expect(resetHarness.state()).toMatchObject({
       activeConfig: { model: "edited-while-resetting" },
       dirty: true,

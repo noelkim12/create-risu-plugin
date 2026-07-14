@@ -132,6 +132,8 @@ function cloneState(state: SettingsState): SettingsState {
 export class LlmSettingsController {
   private readonly listeners = new Set<Listener>()
   private generation = 0
+  private credentialStatusRequest = 0
+  private persistenceTail: Promise<void> = Promise.resolve()
   private secretDraft: CredentialDraft = {}
   private testAbort: AbortController | null = null
   private state: SettingsState = {
@@ -179,16 +181,42 @@ export class LlmSettingsController {
     return this.generation === generation
   }
 
-  private refreshCredentialStatus(config: ProviderConfig, generation: number): void {
-    void this.credentialRepository.status(config).then(credentialState => {
-      if (this.isCurrent(generation)) this.publish({ credentialState })
-    }).catch(error => {
-      if (!this.isCurrent(generation)) return
+  private enqueuePersistence<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.persistenceTail.then(operation)
+    this.persistenceTail = result.then(() => undefined, () => undefined)
+    return result
+  }
+
+  private async refreshCredentialStatus(
+    config: ProviderConfig,
+    generation: number,
+  ): Promise<CredentialState | null> {
+    const request = ++this.credentialStatusRequest
+    try {
+      const credentialState = await this.credentialRepository.status(config)
+      if (this.isCurrent(generation) && request === this.credentialStatusRequest) {
+        this.publish({ credentialState })
+      }
+      return credentialState
+    } catch (error) {
+      if (!this.isCurrent(generation) || request !== this.credentialStatusRequest) return null
       this.publish({
         operation: "error",
         statusMessage: this.safeMessage(error, "Credential status could not be checked."),
       })
-    })
+      return null
+    }
+  }
+
+  private refreshCredentialStatusAfterPersistence(
+    actionConfig: ProviderConfig,
+    actionGeneration: number,
+  ): Promise<CredentialState | null> {
+    const generation = this.generation
+    const config = this.isCurrent(actionGeneration)
+      ? cloneProviderConfig(actionConfig)
+      : cloneProviderConfig(this.state.activeConfig)
+    return this.refreshCredentialStatus(config, generation)
   }
 
   async load(): Promise<void> {
@@ -240,7 +268,7 @@ export class LlmSettingsController {
       fieldErrors: validateProviderConfig(activeConfig),
       statusMessage: "",
     })
-    this.refreshCredentialStatus(activeConfig, generation)
+    void this.refreshCredentialStatus(activeConfig, generation)
   }
 
   updateConfig(config: ProviderConfig): void {
@@ -262,7 +290,7 @@ export class LlmSettingsController {
       fieldErrors: validateProviderConfig(configSnapshot),
       statusMessage: "",
     })
-    this.refreshCredentialStatus(configSnapshot, generation)
+    void this.refreshCredentialStatus(configSnapshot, generation)
   }
 
   setSecretDraft(draft: CredentialDraft): void {
@@ -335,40 +363,37 @@ export class LlmSettingsController {
       this.publish({ fieldErrors: validateProviderConfig(config) })
       assertValidProviderConfig(config)
       const settings = withProviderConfig(settingsSnapshot, config)
-      await this.settingsRepository.save(cloneSettings(settings))
-      if (!this.isCurrent(generation)) return
+      const credentialState = await this.enqueuePersistence(async () => {
+        await this.settingsRepository.save(cloneSettings(settings))
 
-      const apiKey = draft.apiKey?.trim() ?? ""
-      const serviceAccountJson = draft.serviceAccountJson?.trim() ?? ""
-      if (config.provider === "google-vertex" && config.authMode === "service-account") {
-        if (serviceAccountJson !== "") {
-          await this.credentialRepository.saveServiceAccountJson(config, serviceAccountJson)
-          if (!this.isCurrent(generation)) return
+        const apiKey = draft.apiKey?.trim() ?? ""
+        const serviceAccountJson = draft.serviceAccountJson?.trim() ?? ""
+        if (config.provider === "google-vertex" && config.authMode === "service-account") {
+          if (serviceAccountJson !== "") {
+            await this.credentialRepository.saveServiceAccountJson(config, serviceAccountJson)
+          }
+        } else if (config.provider === "openai-compatible") {
+          if (apiKey !== "" || customHeaders !== null) {
+            const stored = await this.credentialRepository.load(config)
+            const preservedHeaders = customHeaders ?? Object.fromEntries(
+              config.customHeaderNames
+                .map(name => [name, stored?.secret[name]] as const)
+                .filter((entry): entry is readonly [string, string] => typeof entry[1] === "string"),
+            )
+            await this.credentialRepository.saveApiKey(
+              config,
+              apiKey || stored?.secret.apiKey || "",
+              preservedHeaders,
+            )
+          }
+        } else if (apiKey !== "") {
+          await this.credentialRepository.saveApiKey(config, apiKey, {})
         }
-      } else if (config.provider === "openai-compatible") {
-        if (apiKey !== "" || customHeaders !== null) {
-          const stored = await this.credentialRepository.load(config)
-          if (!this.isCurrent(generation)) return
-          const preservedHeaders = customHeaders ?? Object.fromEntries(
-            config.customHeaderNames
-              .map(name => [name, stored?.secret[name]] as const)
-              .filter((entry): entry is readonly [string, string] => typeof entry[1] === "string"),
-          )
-          await this.credentialRepository.saveApiKey(
-            config,
-            apiKey || stored?.secret.apiKey || "",
-            preservedHeaders,
-          )
-          if (!this.isCurrent(generation)) return
-        }
-      } else if (apiKey !== "") {
-        await this.credentialRepository.saveApiKey(config, apiKey, {})
-        if (!this.isCurrent(generation)) return
-      }
-      if (config.provider === "google-vertex") this.invalidateAuthCaches()
-
-      const credentialState = await this.credentialRepository.status(config)
+        if (config.provider === "google-vertex") this.invalidateAuthCaches()
+        return this.refreshCredentialStatusAfterPersistence(config, generation)
+      })
       if (!this.isCurrent(generation)) return
+      if (credentialState === null) return
       this.secretDraft = {}
       this.publish({
         operation: "success",
@@ -434,9 +459,13 @@ export class LlmSettingsController {
     const config = cloneProviderConfig(this.state.activeConfig)
     this.publish({ operation: "saving", statusMessage: "Removing credential…" })
     try {
-      await this.credentialRepository.clear(config)
-      if (config.provider === "google-vertex") this.invalidateAuthCaches()
+      const credentialState = await this.enqueuePersistence(async () => {
+        await this.credentialRepository.clear(config)
+        if (config.provider === "google-vertex") this.invalidateAuthCaches()
+        return this.refreshCredentialStatusAfterPersistence(config, generation)
+      })
       if (!this.isCurrent(generation)) return
+      if (credentialState === null) return
       this.secretDraft = {}
       this.publish({
         operation: "success",
@@ -460,11 +489,14 @@ export class LlmSettingsController {
     const settings = withProviderConfig(currentSettings, config)
     this.publish({ operation: "saving", statusMessage: "Resetting provider…" })
     try {
-      await this.credentialRepository.clearProvider(provider)
-      if (provider === "google-vertex") this.invalidateAuthCaches()
+      const credentialState = await this.enqueuePersistence(async () => {
+        await this.credentialRepository.clearProvider(provider)
+        if (provider === "google-vertex") this.invalidateAuthCaches()
+        await this.settingsRepository.save(cloneSettings(settings))
+        return this.refreshCredentialStatusAfterPersistence(config, generation)
+      })
       if (!this.isCurrent(generation)) return
-      await this.settingsRepository.save(cloneSettings(settings))
-      if (!this.isCurrent(generation)) return
+      if (credentialState === null) return
       this.secretDraft = {}
       this.publish({
         operation: "success",
