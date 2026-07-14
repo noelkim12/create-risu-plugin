@@ -13,6 +13,7 @@ function state(patch: Partial<SettingsState> = {}): SettingsState {
   const activeConfig = { ...settings.providers["google-ai-studio"], model: "gemini-test" }
   return {
     operation: "idle",
+    loaded: true,
     settings: {
       ...settings,
       providers: { ...settings.providers, "google-ai-studio": activeConfig },
@@ -182,11 +183,12 @@ describe("Vanilla LLM settings panel", () => {
     apiKey.dispatchEvent(new Event("input"))
     button(target, "Save").click()
     button(target, "Test connection").click()
-    button(target, "Cancel test").click()
     button(target, "Clear credential").click()
     vi.stubGlobal("confirm", vi.fn().mockReturnValue(true))
     button(target, "Reset provider").click()
     button(target, "Close").click()
+    fake.publish({ operation: "testing" })
+    button(target, "Cancel test").click()
 
     expect(fake.methods.updateConfig).toHaveBeenCalledWith(expect.objectContaining({ model: "gemini-new" }))
     expect(fake.methods.setSecretDraft).toHaveBeenCalledWith({ apiKey: "draft" })
@@ -198,17 +200,105 @@ describe("Vanilla LLM settings panel", () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 
-  it("reflects saving and testing states without duplicating controller behavior", () => {
+  it("preserves focus and caret while typing multiple config and secret characters", () => {
     const target = document.createElement("div")
-    const fake = fakeController()
+    document.body.append(target)
+    const fake = fakeController(providerState("openai-compatible"))
+    fake.methods.updateConfig.mockImplementation(config => {
+      fake.publish({ activeConfig: config, dirty: true })
+    })
+    fake.methods.setSecretDraft.mockImplementation(() => {
+      fake.publish({ dirty: true })
+    })
     mountLlmSettingsPanel(target, fake.controller, vi.fn().mockResolvedValue(undefined))
 
-    expect(button(target, "Cancel test").hidden).toBe(true)
-    fake.publish({ operation: "saving" })
-    expect(button(target, "Save").disabled).toBe(true)
-    fake.publish({ operation: "testing" })
-    expect(button(target, "Test connection").disabled).toBe(true)
-    expect(button(target, "Cancel test").hidden).toBe(false)
+    const type = (label: string, text: string): void => {
+      for (const character of text) {
+        const input = labeled<HTMLInputElement | HTMLTextAreaElement>(target, label)
+        input.focus()
+        input.setSelectionRange(input.value.length, input.value.length)
+        input.value = `${input.value}${character}`
+        input.dispatchEvent(new Event("input"))
+        const current = labeled<HTMLInputElement | HTMLTextAreaElement>(target, label)
+        expect(document.activeElement).toBe(current)
+        expect(current.selectionStart).toBe(current.value.length)
+        expect(current.selectionEnd).toBe(current.value.length)
+      }
+    }
+
+    labeled<HTMLInputElement>(target, "Model").value = ""
+    type("Model", "nova")
+    type("API key", "secret")
+    type("Custom headers JSON", "{}")
+    const authentication = labeled<HTMLSelectElement>(target, "Authentication")
+    authentication.focus()
+    authentication.value = "none"
+    authentication.dispatchEvent(new Event("change"))
+    expect(document.activeElement).toBe(labeled(target, "Authentication"))
+
+    expect(fake.methods.updateConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "nova" }),
+    )
+    expect(fake.methods.setSecretDraft).toHaveBeenCalledWith({ apiKey: "secret" })
+    expect(fake.methods.setSecretDraft).toHaveBeenLastCalledWith({ customHeadersJson: "{}" })
+    expect(labeled<HTMLInputElement>(target, "API key (optional)").value).toBe("secret")
+    expect(labeled<HTMLTextAreaElement>(target, "Custom headers JSON").value).toBe("{}")
+  })
+
+  it.each(["loading", "saving", "clearing", "resetting"] as const)(
+    "locks edits and conflicting actions while %s",
+    operation => {
+      const target = document.createElement("div")
+      const fake = fakeController(state({ operation, loaded: operation !== "loading" }))
+      const onClose = vi.fn().mockResolvedValue(undefined)
+      mountLlmSettingsPanel(target, fake.controller, onClose)
+
+      const model = labeled<HTMLInputElement>(target, "Model")
+      const provider = labeled<HTMLSelectElement>(target, "Provider")
+      expect(model.disabled).toBe(true)
+      expect(provider.disabled).toBe(true)
+      for (const label of ["Save", "Test connection", "Clear credential", "Reset provider"]) {
+        expect(button(target, label).disabled).toBe(true)
+        button(target, label).click()
+      }
+      model.value = "blocked"
+      model.dispatchEvent(new Event("input"))
+      provider.value = "ollama"
+      provider.dispatchEvent(new Event("change"))
+
+      expect(fake.methods.updateConfig).not.toHaveBeenCalled()
+      expect(fake.methods.selectProvider).not.toHaveBeenCalled()
+      expect(fake.methods.save).not.toHaveBeenCalled()
+      expect(fake.methods.testConnection).not.toHaveBeenCalled()
+      expect(fake.methods.clearCredential).not.toHaveBeenCalled()
+      expect(fake.methods.resetActiveProvider).not.toHaveBeenCalled()
+    },
+  )
+
+  it("keeps only Cancel test active while testing", () => {
+    const target = document.createElement("div")
+    const fake = fakeController(state({ operation: "testing" }))
+    const onClose = vi.fn().mockResolvedValue(undefined)
+    mountLlmSettingsPanel(target, fake.controller, onClose)
+
+    for (const element of target.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+      "input, select, textarea",
+    )) expect(element.disabled).toBe(true)
+    for (const label of ["Save", "Test connection", "Clear credential", "Reset provider", "Close"]) {
+      expect(button(target, label).disabled).toBe(true)
+      button(target, label).click()
+    }
+    const cancel = button(target, "Cancel test")
+    expect(cancel.hidden).toBe(false)
+    expect(cancel.disabled).toBe(false)
+    cancel.click()
+
+    expect(fake.methods.cancelTest).toHaveBeenCalledOnce()
+    expect(fake.methods.save).not.toHaveBeenCalled()
+    expect(fake.methods.testConnection).not.toHaveBeenCalled()
+    expect(fake.methods.clearCredential).not.toHaveBeenCalled()
+    expect(fake.methods.resetActiveProvider).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it("shows web-local routing warnings for compatible endpoints", () => {
@@ -222,6 +312,25 @@ describe("Vanilla LLM settings panel", () => {
     }))
     mountLlmSettingsPanel(target, fake.controller, vi.fn().mockResolvedValue(undefined))
     expect(target.textContent).toContain("Hosted web cannot reach this local endpoint")
+  })
+
+  it("shows the Ollama hosted-web warning only for local endpoints", () => {
+    const target = document.createElement("div")
+    const local = providerState("ollama", {
+      activeConfig: {
+        ...createDefaultSettings().providers.ollama,
+        baseUrl: "http://192.168.1.20:11434",
+        model: "local-model",
+      },
+    })
+    const fake = fakeController(local)
+    mountLlmSettingsPanel(target, fake.controller, vi.fn().mockResolvedValue(undefined))
+    expect(target.textContent).toContain("Hosted web cannot reach local Ollama")
+
+    fake.publish({
+      activeConfig: { ...local.activeConfig, baseUrl: "https://ollama.example.com" },
+    })
+    expect(target.textContent).not.toContain("Hosted web cannot reach local Ollama")
   })
 
   it("unsubscribes, disposes, and clears the target", () => {

@@ -87,6 +87,24 @@ function createHarness(settingsValue = validSettings()) {
 describe("LlmSettingsController", () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it("does not save defaults before loading completes", async () => {
+    const harness = createHarness()
+    const settingsLoad = deferred<LlmSettings>()
+    harness.settings.load.mockReturnValueOnce(settingsLoad.promise)
+
+    await harness.controller.save()
+    expect(harness.settings.save).not.toHaveBeenCalled()
+
+    const loading = harness.controller.load()
+    expect(harness.state()).toMatchObject({ operation: "loading", loaded: false })
+    await harness.controller.save()
+    expect(harness.settings.save).not.toHaveBeenCalled()
+
+    settingsLoad.resolve(validSettings())
+    await loading
+    expect(harness.state()).toMatchObject({ operation: "idle", loaded: true })
+  })
+
   it("loads, edits, and saves a replacement API key", async () => {
     const harness = createHarness()
     harness.credentials.status

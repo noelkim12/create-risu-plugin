@@ -49,11 +49,13 @@ function textInput(
   onInput: (value: string) => void,
   error = "",
   type: "text" | "password" | "number" = "text",
+  disabled = false,
 ): HTMLDivElement {
   const input = document.createElement("input")
   input.type = type
   input.value = value
   input.autocomplete = type === "password" ? "new-password" : "off"
+  input.disabled = disabled
   input.addEventListener("input", () => onInput(input.value))
   return field(id, label, input, error)
 }
@@ -64,11 +66,13 @@ function textareaField(
   value: string,
   onInput: (value: string) => void,
   error = "",
+  disabled = false,
 ): HTMLDivElement {
   const textarea = document.createElement("textarea")
   textarea.rows = 7
   textarea.value = value
   textarea.autocomplete = "off"
+  textarea.disabled = disabled
   textarea.addEventListener("input", () => onInput(textarea.value))
   return field(id, label, textarea, error)
 }
@@ -80,12 +84,14 @@ function selectField(
   entries: readonly (readonly [string, string])[],
   onChange: (value: string) => void,
   error = "",
+  disabled = false,
 ): HTMLDivElement {
   const select = document.createElement("select")
   for (const [entryValue, entryLabel] of entries) {
     select.append(option(entryValue, entryLabel))
   }
   select.value = value
+  select.disabled = disabled
   select.addEventListener("change", () => onChange(select.value))
   return field(id, label, select, error)
 }
@@ -95,6 +101,47 @@ function info(text: string, className = ""): HTMLParagraphElement {
   element.className = className
   element.textContent = text
   return element
+}
+
+interface FocusSnapshot {
+  readonly id: string
+  readonly selectionDirection?: "backward" | "forward" | "none"
+  readonly selectionEnd?: number
+  readonly selectionStart?: number
+}
+
+function captureFocus(target: HTMLElement): FocusSnapshot | null {
+  const active = document.activeElement
+  if (!(active instanceof HTMLElement) || !target.contains(active) || active.id === "") return null
+  if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+    return {
+      id: active.id,
+      selectionDirection: active.selectionDirection ?? "none",
+      selectionEnd: active.selectionEnd ?? undefined,
+      selectionStart: active.selectionStart ?? undefined,
+    }
+  }
+  return { id: active.id }
+}
+
+function restoreFocus(target: HTMLElement, snapshot: FocusSnapshot | null): void {
+  if (snapshot === null) return
+  const next = [...target.querySelectorAll<HTMLElement>("[id]")]
+    .find(element => element.id === snapshot.id)
+  if (!next || next.hidden || ("disabled" in next && next.disabled === true)) return
+  next.focus()
+  if (
+    (next instanceof HTMLInputElement || next instanceof HTMLTextAreaElement)
+    && snapshot.selectionStart !== undefined
+    && snapshot.selectionEnd !== undefined
+  ) {
+    const length = next.value.length
+    next.setSelectionRange(
+      Math.min(snapshot.selectionStart, length),
+      Math.min(snapshot.selectionEnd, length),
+      snapshot.selectionDirection,
+    )
+  }
 }
 
 export function mountLlmSettingsPanel(
@@ -115,7 +162,13 @@ export function mountLlmSettingsPanel(
     drafts.customHeadersJson = ""
   }
 
-  const setConfig = (config: ProviderConfig): void => controller.updateConfig(config)
+  const isLocked = (value = state): boolean => value === null
+    || !value.loaded
+    || ["loading", "saving", "clearing", "resetting", "testing"].includes(value.operation)
+
+  const setConfig = (config: ProviderConfig): void => {
+    if (!isLocked()) controller.updateConfig(config)
+  }
 
   const appendCommonFields = (grid: HTMLDivElement, value: SettingsState): void => {
     const config = value.activeConfig
@@ -125,9 +178,12 @@ export function mountLlmSettingsPanel(
       config.provider,
       Object.entries(PROVIDER_LABELS),
       next => {
+        if (isLocked()) return
         clearDrafts()
         controller.selectProvider(next as ProviderId)
       },
+      "",
+      isLocked(value),
     ))
     grid.append(textInput(
       "llm-model",
@@ -135,6 +191,8 @@ export function mountLlmSettingsPanel(
       config.model,
       model => setConfig({ ...config, model } as ProviderConfig),
       value.fieldErrors.model,
+      "text",
+      isLocked(value),
     ))
     grid.append(textInput(
       "llm-timeout",
@@ -143,6 +201,7 @@ export function mountLlmSettingsPanel(
       timeout => setConfig({ ...config, timeoutMs: Number(timeout) } as ProviderConfig),
       value.fieldErrors.timeoutMs,
       "number",
+      isLocked(value),
     ))
   }
 
@@ -152,11 +211,13 @@ export function mountLlmSettingsPanel(
       optional ? "API key (optional)" : "API key",
       drafts.apiKey,
       apiKey => {
+        if (isLocked()) return
         drafts.apiKey = apiKey
         controller.setSecretDraft({ apiKey })
       },
       "",
       "password",
+      isLocked(),
     ))
     grid.append(info("Leave blank to preserve the stored key.", "llm-help"))
   }
@@ -185,7 +246,9 @@ export function mountLlmSettingsPanel(
       tab.setAttribute("aria-selected", String(config.authMode === mode))
       tab.setAttribute("aria-controls", `llm-vertex-${mode}-panel`)
       tab.tabIndex = config.authMode === mode ? 0 : -1
+      tab.disabled = isLocked(value)
       const activate = (): void => {
+        if (isLocked()) return
         drafts.apiKey = ""
         drafts.serviceAccountJson = ""
         setConfig({ ...config, authMode: mode })
@@ -194,7 +257,7 @@ export function mountLlmSettingsPanel(
       tab.addEventListener("click", activate)
       tab.addEventListener("keydown", event => {
         const keys = ["ArrowLeft", "ArrowRight", "Home", "End"]
-        if (!keys.includes(event.key)) return
+        if (!keys.includes(event.key) || isLocked()) return
         event.preventDefault()
         const nextIndex = event.key === "Home"
           ? 0
@@ -221,6 +284,8 @@ export function mountLlmSettingsPanel(
         config.projectId,
         projectId => setConfig({ ...config, projectId }),
         value.fieldErrors.projectId,
+        "text",
+        isLocked(value),
       ))
       panel.append(textInput(
         "llm-location",
@@ -228,15 +293,20 @@ export function mountLlmSettingsPanel(
         config.location,
         location => setConfig({ ...config, location }),
         value.fieldErrors.location,
+        "text",
+        isLocked(value),
       ))
       panel.append(textareaField(
         "llm-service-account-json",
         "Service Account JSON",
         drafts.serviceAccountJson,
         serviceAccountJson => {
+          if (isLocked()) return
           drafts.serviceAccountJson = serviceAccountJson
           controller.setSecretDraft({ serviceAccountJson })
         },
+        "",
+        isLocked(value),
       ))
       panel.append(info("Leave blank to preserve the stored Service Account credential.", "llm-help"))
     }
@@ -261,6 +331,8 @@ export function mountLlmSettingsPanel(
           config.baseUrl,
           baseUrl => setConfig({ ...config, baseUrl }),
           value.fieldErrors.baseUrl,
+          "text",
+          isLocked(value),
         ))
         grid.append(selectField(
           "llm-authentication",
@@ -268,6 +340,8 @@ export function mountLlmSettingsPanel(
           config.authMode,
           [["bearer", "Bearer"], ["none", "None"]],
           authMode => setConfig({ ...config, authMode: authMode as "bearer" | "none" }),
+          "",
+          isLocked(value),
         ))
         appendApiKey(grid, config.authMode === "none")
         grid.append(textareaField(
@@ -275,10 +349,12 @@ export function mountLlmSettingsPanel(
           "Custom headers JSON",
           drafts.customHeadersJson,
           customHeadersJson => {
+            if (isLocked()) return
             drafts.customHeadersJson = customHeadersJson
             controller.setSecretDraft({ customHeadersJson })
           },
           value.fieldErrors.customHeaderNames,
+          isLocked(value),
         ))
         grid.append(info(
           "Leave blank to preserve stored headers; enter {} to remove them. Reserved headers are rejected.",
@@ -301,6 +377,8 @@ export function mountLlmSettingsPanel(
           config.baseUrl,
           baseUrl => setConfig({ ...config, baseUrl }),
           value.fieldErrors.baseUrl,
+          "text",
+          isLocked(value),
         ))
         grid.append(selectField(
           "llm-authentication",
@@ -308,14 +386,18 @@ export function mountLlmSettingsPanel(
           config.authMode,
           [["none", "None"], ["bearer", "Bearer"]],
           authMode => setConfig({ ...config, authMode: authMode as "none" | "bearer" }),
+          "",
+          isLocked(value),
         ))
         appendApiKey(grid, config.authMode === "none")
-        grid.append(info(
-          value.runtimePlatform === "web"
-            ? "Hosted web cannot reach local Ollama. Use Risu desktop/Tauri or self-hosted Node."
-            : "This runtime can route local Ollama requests.",
-          value.runtimePlatform === "web" ? "llm-error" : "llm-help",
-        ))
+        if (value.runtimePlatform === "web" && isLocalNetworkUrl(config.baseUrl)) {
+          grid.append(info(
+            "Hosted web cannot reach local Ollama. Use Risu desktop/Tauri or self-hosted Node.",
+            "llm-error",
+          ))
+        } else {
+          grid.append(info("This runtime can route this Ollama endpoint.", "llm-help"))
+        }
     }
   }
 
@@ -329,31 +411,37 @@ export function mountLlmSettingsPanel(
       return element
     }
     const saveButton = button("Save")
-    saveButton.disabled = value.operation === "saving"
-    saveButton.onclick = () => void controller.save()
+    saveButton.disabled = isLocked(value)
+    saveButton.onclick = () => { if (!isLocked()) void controller.save() }
     const testButton = button("Test connection")
-    testButton.disabled = value.operation === "testing"
-    testButton.onclick = () => void controller.testConnection()
+    testButton.disabled = isLocked(value)
+    testButton.onclick = () => { if (!isLocked()) void controller.testConnection() }
     const cancelButton = button("Cancel test")
     cancelButton.hidden = value.operation !== "testing"
-    cancelButton.onclick = () => controller.cancelTest()
+    cancelButton.disabled = value.operation !== "testing"
+    cancelButton.onclick = () => { if (state?.operation === "testing") controller.cancelTest() }
     const clearButton = button("Clear credential")
-    clearButton.onclick = () => void controller.clearCredential()
+    clearButton.disabled = isLocked(value)
+    clearButton.onclick = () => { if (!isLocked()) void controller.clearCredential() }
     const resetButton = button("Reset provider")
+    resetButton.disabled = isLocked(value)
     resetButton.onclick = () => {
+      if (isLocked()) return
       if (window.confirm("Reset this provider and remove its stored credentials?")) {
         clearDrafts()
         void controller.resetActiveProvider()
       }
     }
     const closeButton = button("Close")
-    closeButton.onclick = () => void onClose()
+    closeButton.disabled = value.operation === "testing"
+    closeButton.onclick = () => { if (state?.operation !== "testing") void onClose() }
     actions.append(saveButton, testButton, cancelButton, clearButton, resetButton, closeButton)
     form.append(actions)
   }
 
   const render = (): void => {
     if (state === null) return
+    const focus = captureFocus(target)
     const main = document.createElement("main")
     main.className = "llm-settings-shell"
     main.setAttribute("aria-labelledby", "llm-settings-title")
@@ -374,7 +462,7 @@ export function mountLlmSettingsPanel(
     form.noValidate = true
     form.addEventListener("submit", event => {
       event.preventDefault()
-      void controller.save()
+      if (!isLocked()) void controller.save()
     })
     const grid = document.createElement("div")
     grid.className = "llm-field-grid"
@@ -401,6 +489,7 @@ export function mountLlmSettingsPanel(
     card.append(title, storageWarning, form, credential, status)
     main.append(card)
     target.replaceChildren(main)
+    restoreFocus(target, focus)
   }
 
   const unsubscribe = controller.subscribe(next => {

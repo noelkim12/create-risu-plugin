@@ -18,11 +18,20 @@ import {
   parseServiceAccountJson,
 } from "../storage/local-credential-repository"
 
-export type SettingsOperation = "idle" | "loading" | "saving" | "testing" | "success" | "error"
+export type SettingsOperation =
+  | "idle"
+  | "loading"
+  | "saving"
+  | "clearing"
+  | "resetting"
+  | "testing"
+  | "success"
+  | "error"
 export type CredentialState = "missing" | "stored" | "stale"
 
 export interface SettingsState {
   readonly operation: SettingsOperation
+  readonly loaded: boolean
   readonly settings: LlmSettings
   readonly activeConfig: ProviderConfig
   readonly credentialState: CredentialState
@@ -138,6 +147,7 @@ export class LlmSettingsController {
   private testAbort: AbortController | null = null
   private state: SettingsState = {
     operation: "idle",
+    loaded: false,
     settings: createDefaultSettings(),
     activeConfig: createDefaultSettings().providers["google-ai-studio"],
     credentialState: "missing",
@@ -175,6 +185,15 @@ export class LlmSettingsController {
     this.testAbort?.abort()
     this.testAbort = null
     return this.generation
+  }
+
+  private isBusy(): boolean {
+    return ["loading", "saving", "clearing", "resetting", "testing"]
+      .includes(this.state.operation)
+  }
+
+  private canStartOperation(): boolean {
+    return this.state.loaded
   }
 
   private isCurrent(generation: number): boolean {
@@ -220,8 +239,9 @@ export class LlmSettingsController {
   }
 
   async load(): Promise<void> {
+    if (this.isBusy()) return
     const generation = this.beginMutation()
-    this.publish({ operation: "loading", statusMessage: "Loading LLM settings…" })
+    this.publish({ operation: "loading", loaded: false, statusMessage: "Loading LLM settings…" })
     try {
       const [loadedSettings, runtime] = await Promise.all([
         this.settingsRepository.load(),
@@ -234,6 +254,7 @@ export class LlmSettingsController {
       if (!this.isCurrent(generation)) return
       this.publish({
         operation: "idle",
+        loaded: true,
         settings,
         activeConfig,
         credentialState,
@@ -353,6 +374,7 @@ export class LlmSettingsController {
   }
 
   async save(): Promise<void> {
+    if (!this.canStartOperation()) return
     const generation = this.beginMutation()
     const settingsSnapshot = cloneSettings(this.state.settings)
     const configSnapshot = cloneProviderConfig(this.activeConfig(settingsSnapshot))
@@ -414,6 +436,7 @@ export class LlmSettingsController {
   }
 
   async testConnection(): Promise<void> {
+    if (!this.canStartOperation()) return
     const generation = this.beginMutation()
     const configSnapshot = cloneProviderConfig(this.state.activeConfig)
     const draft = { ...this.secretDraft }
@@ -455,9 +478,10 @@ export class LlmSettingsController {
   }
 
   async clearCredential(): Promise<void> {
+    if (!this.canStartOperation()) return
     const generation = this.beginMutation()
     const config = cloneProviderConfig(this.state.activeConfig)
-    this.publish({ operation: "saving", statusMessage: "Removing credential…" })
+    this.publish({ operation: "clearing", statusMessage: "Removing credential…" })
     try {
       const credentialState = await this.enqueuePersistence(async () => {
         await this.credentialRepository.clear(config)
@@ -482,12 +506,13 @@ export class LlmSettingsController {
   }
 
   async resetActiveProvider(): Promise<void> {
+    if (!this.canStartOperation()) return
     const generation = this.beginMutation()
     const currentSettings = cloneSettings(this.state.settings)
     const provider = currentSettings.activeProvider
     const config = cloneProviderConfig(createDefaultSettings().providers[provider])
     const settings = withProviderConfig(currentSettings, config)
-    this.publish({ operation: "saving", statusMessage: "Resetting provider…" })
+    this.publish({ operation: "resetting", statusMessage: "Resetting provider…" })
     try {
       const credentialState = await this.enqueuePersistence(async () => {
         await this.credentialRepository.clearProvider(provider)
