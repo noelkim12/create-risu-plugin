@@ -177,10 +177,16 @@ export function assertValidRequest(request: LlmRequest): void {
   if (request.messages.length === 0 || request.messages.every(message => message.content.trim() === "")) {
     throw new LlmError("CONFIG_INVALID", "At least one non-empty message is required.")
   }
-  if (request.temperature !== undefined && (request.temperature < 0 || request.temperature > 2)) {
+  if (
+    request.temperature !== undefined
+    && (!Number.isFinite(request.temperature) || request.temperature < 0 || request.temperature > 2)
+  ) {
     throw new LlmError("CONFIG_INVALID", "temperature must be between 0 and 2.")
   }
-  if (request.topP !== undefined && (request.topP < 0 || request.topP > 1)) {
+  if (
+    request.topP !== undefined
+    && (!Number.isFinite(request.topP) || request.topP < 0 || request.topP > 1)
+  ) {
     throw new LlmError("CONFIG_INVALID", "topP must be between 0 and 1.")
   }
   if (request.maxOutputTokens !== undefined && (!Number.isInteger(request.maxOutputTokens) || request.maxOutputTokens < 1)) {

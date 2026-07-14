@@ -634,6 +634,57 @@ describe("LlmSettingsController", () => {
       statusMessage: "Provider reset.",
     })
   })
+
+  it("disposes a pending load and can load again without stale publication", async () => {
+    const harness = createHarness()
+    const firstLoad = deferred<LlmSettings>()
+    harness.settings.load.mockReturnValueOnce(firstLoad.promise)
+    const pending = harness.controller.load()
+    await vi.waitFor(() => expect(harness.state().operation).toBe("loading"))
+
+    harness.controller.dispose()
+    let reopened: SettingsState | undefined
+    harness.controller.subscribe(value => { reopened = value })
+    expect(reopened).toMatchObject({ operation: "idle", loaded: false, statusMessage: "" })
+
+    await harness.controller.load()
+    expect(reopened).toMatchObject({ operation: "idle", loaded: true })
+    firstLoad.resolve(validSettings("ollama"))
+    await pending
+    expect(reopened).toMatchObject({
+      operation: "idle",
+      loaded: true,
+      activeConfig: { provider: "google-ai-studio" },
+    })
+  })
+
+  it("disposes a pending save, clears its draft, and supports singleton-style reuse", async () => {
+    const harness = createHarness()
+    await harness.controller.load()
+    const firstSave = deferred<void>()
+    harness.settings.save.mockReturnValueOnce(firstSave.promise)
+    harness.controller.setSecretDraft({ apiKey: "old-draft" })
+    const pending = harness.controller.save()
+    await vi.waitFor(() => expect(harness.state().operation).toBe("saving"))
+
+    harness.controller.dispose()
+    let reopened: SettingsState | undefined
+    harness.controller.subscribe(value => { reopened = value })
+    expect(reopened).toMatchObject({ operation: "idle", loaded: false, statusMessage: "" })
+    await harness.controller.load()
+    firstSave.resolve()
+    await pending
+    expect(reopened).toMatchObject({ operation: "idle", loaded: true, statusMessage: "" })
+    expect(harness.credentials.status).toHaveBeenCalledTimes(2)
+
+    await harness.controller.save()
+    expect(harness.credentials.saveApiKey).toHaveBeenCalledTimes(1)
+    expect(harness.credentials.saveApiKey).toHaveBeenCalledWith(
+      expect.anything(),
+      "old-draft",
+      {},
+    )
+  })
 })
 
 describe("parseCustomHeaders", () => {

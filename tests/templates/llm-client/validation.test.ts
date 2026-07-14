@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  assertValidRequest,
   createDefaultSettings,
   validateProviderConfig,
 } from "../../../templates/features/llm-client/common/ts/src/features/llm-client/core/validation"
@@ -58,5 +59,17 @@ describe("LLM settings defaults and validation", () => {
     })).toMatchObject({
       location: "Location must be global or a lowercase Google Cloud region name.",
     })
+  })
+
+  it.each([
+    ["temperature", Number.NaN],
+    ["temperature", Number.POSITIVE_INFINITY],
+    ["topP", Number.NaN],
+    ["topP", Number.POSITIVE_INFINITY],
+  ] as const)("rejects non-finite %s", (field, value) => {
+    expect(() => assertValidRequest({
+      messages: [{ role: "user", content: "hello" }],
+      [field]: value,
+    })).toThrowError(expect.objectContaining({ code: "CONFIG_INVALID" }))
   })
 })

@@ -69,5 +69,9 @@ describe("FeatureComposer", () => {
       "base template owns this file\n",
     );
     await expect(composer.composeFeatures()).rejects.toThrow();
+    await expect(fs.readFile(
+      path.join(targetDir, "src/features/llm-client/common.ts"),
+      "utf8",
+    )).resolves.toBe("base template owns this file\n");
   });
 });

@@ -144,6 +144,7 @@ function cloneState(state: SettingsState): SettingsState {
 export class LlmSettingsController {
   private readonly listeners = new Set<Listener>()
   private generation = 0
+  private lifecycle = 0
   private credentialStatusRequest = 0
   private persistenceTail: Promise<void> = Promise.resolve()
   private secretDraft: CredentialDraft = {}
@@ -233,7 +234,9 @@ export class LlmSettingsController {
   private refreshCredentialStatusAfterPersistence(
     actionConfig: ProviderConfig,
     actionGeneration: number,
+    actionLifecycle: number,
   ): Promise<CredentialState | null> {
+    if (actionLifecycle !== this.lifecycle) return Promise.resolve(null)
     const generation = this.generation
     const config = this.isCurrent(actionGeneration)
       ? cloneProviderConfig(actionConfig)
@@ -379,6 +382,7 @@ export class LlmSettingsController {
   async save(): Promise<void> {
     if (!this.canStartOperation()) return
     const generation = this.beginMutation()
+    const lifecycle = this.lifecycle
     const settingsSnapshot = cloneSettings(this.state.settings)
     const configSnapshot = cloneProviderConfig(this.activeConfig(settingsSnapshot))
     const draft = { ...this.secretDraft }
@@ -415,7 +419,7 @@ export class LlmSettingsController {
           await this.credentialRepository.saveApiKey(config, apiKey, {})
         }
         if (config.provider === "google-vertex") this.invalidateAuthCaches()
-        return this.refreshCredentialStatusAfterPersistence(config, generation)
+        return this.refreshCredentialStatusAfterPersistence(config, generation, lifecycle)
       })
       if (!this.isCurrent(generation)) return
       if (credentialState === null) return
@@ -483,13 +487,14 @@ export class LlmSettingsController {
   async clearCredential(): Promise<void> {
     if (!this.canStartOperation()) return
     const generation = this.beginMutation()
+    const lifecycle = this.lifecycle
     const config = cloneProviderConfig(this.state.activeConfig)
     this.publish({ operation: "clearing", statusMessage: "Removing credential…" })
     try {
       const credentialState = await this.enqueuePersistence(async () => {
         await this.credentialRepository.clear(config)
         if (config.provider === "google-vertex") this.invalidateAuthCaches()
-        return this.refreshCredentialStatusAfterPersistence(config, generation)
+        return this.refreshCredentialStatusAfterPersistence(config, generation, lifecycle)
       })
       if (!this.isCurrent(generation)) return
       if (credentialState === null) return
@@ -511,6 +516,7 @@ export class LlmSettingsController {
   async resetActiveProvider(): Promise<void> {
     if (!this.canStartOperation()) return
     const generation = this.beginMutation()
+    const lifecycle = this.lifecycle
     const currentSettings = cloneSettings(this.state.settings)
     const provider = currentSettings.activeProvider
     const config = cloneProviderConfig(createDefaultSettings().providers[provider])
@@ -521,7 +527,7 @@ export class LlmSettingsController {
         await this.credentialRepository.clearProvider(provider)
         if (provider === "google-vertex") this.invalidateAuthCaches()
         await this.settingsRepository.save(cloneSettings(settings))
-        return this.refreshCredentialStatusAfterPersistence(config, generation)
+        return this.refreshCredentialStatusAfterPersistence(config, generation, lifecycle)
       })
       if (!this.isCurrent(generation)) return
       if (credentialState === null) return
@@ -546,7 +552,21 @@ export class LlmSettingsController {
 
   dispose(): void {
     this.beginMutation()
+    this.lifecycle += 1
+    this.credentialStatusRequest += 1
     this.secretDraft = {}
     this.listeners.clear()
+    const settings = createDefaultSettings()
+    this.state = cloneState({
+      ...this.state,
+      operation: "idle",
+      loaded: false,
+      settings,
+      activeConfig: settings.providers[settings.activeProvider],
+      credentialState: "missing",
+      dirty: false,
+      fieldErrors: {},
+      statusMessage: "",
+    })
   }
 }

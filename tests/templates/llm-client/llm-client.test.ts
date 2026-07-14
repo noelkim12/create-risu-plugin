@@ -86,6 +86,20 @@ describe("LlmClient", () => {
     expect(registry.for).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ["temperature", Number.NaN],
+    ["temperature", Number.POSITIVE_INFINITY],
+    ["topP", Number.NaN],
+    ["topP", Number.POSITIVE_INFINITY],
+  ] as const)("rejects non-finite %s before provider lookup", async (field, value) => {
+    await expect(client.complete({
+      messages: [{ role: "user", content: "hello" }],
+      [field]: value,
+    })).rejects.toMatchObject({ code: "CONFIG_INVALID" })
+    expect(settingsReader.load).not.toHaveBeenCalled()
+    expect(registry.for).not.toHaveBeenCalled()
+  })
+
   it("uses the fixed minimal request for Test Connection", async () => {
     await client.testConnection(settings.providers["google-ai-studio"], storedCredential)
     expect(provider.complete).toHaveBeenCalledWith(expect.objectContaining({
