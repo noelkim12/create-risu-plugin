@@ -70,7 +70,7 @@ export class LlmClient {
         messages: [{ role: "user", content: "Reply with OK." }],
         maxOutputTokens: 8,
       },
-      { signal },
+      signal === undefined ? {} : { signal },
     )
   }
 

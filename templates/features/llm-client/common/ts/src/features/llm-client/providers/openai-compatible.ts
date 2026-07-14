@@ -33,7 +33,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       method: "POST",
       headers,
       body: JSON.stringify(toOpenAiChatRequest(config, execution.request)),
-      signal: execution.options.signal,
+      ...(execution.options.signal === undefined ? {} : { signal: execution.options.signal }),
       timeoutMs: execution.options.timeoutMs ?? config.timeoutMs,
       networkRoute: networkRouteForUrl(url),
     })

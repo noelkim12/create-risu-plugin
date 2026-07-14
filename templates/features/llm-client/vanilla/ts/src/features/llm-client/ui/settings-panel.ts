@@ -117,8 +117,8 @@ function captureFocus(target: HTMLElement): FocusSnapshot | null {
     return {
       id: active.id,
       selectionDirection: active.selectionDirection ?? "none",
-      selectionEnd: active.selectionEnd ?? undefined,
-      selectionStart: active.selectionStart ?? undefined,
+      ...(active.selectionEnd === null ? {} : { selectionEnd: active.selectionEnd }),
+      ...(active.selectionStart === null ? {} : { selectionStart: active.selectionStart }),
     }
   }
   return { id: active.id }
@@ -190,7 +190,7 @@ export function mountLlmSettingsPanel(
       "Model",
       config.model,
       model => setConfig({ ...config, model } as ProviderConfig),
-      value.fieldErrors.model,
+      value.fieldErrors["model"],
       "text",
       isLocked(value),
     ))
@@ -199,7 +199,7 @@ export function mountLlmSettingsPanel(
       "Timeout (ms)",
       String(config.timeoutMs),
       timeout => setConfig({ ...config, timeoutMs: Number(timeout) } as ProviderConfig),
-      value.fieldErrors.timeoutMs,
+      value.fieldErrors["timeoutMs"],
       "number",
       isLocked(value),
     ))
@@ -283,7 +283,7 @@ export function mountLlmSettingsPanel(
         "Project ID",
         config.projectId,
         projectId => setConfig({ ...config, projectId }),
-        value.fieldErrors.projectId,
+        value.fieldErrors["projectId"],
         "text",
         isLocked(value),
       ))
@@ -292,7 +292,7 @@ export function mountLlmSettingsPanel(
         "Location",
         config.location,
         location => setConfig({ ...config, location }),
-        value.fieldErrors.location,
+        value.fieldErrors["location"],
         "text",
         isLocked(value),
       ))
@@ -330,7 +330,7 @@ export function mountLlmSettingsPanel(
           "Base URL",
           config.baseUrl,
           baseUrl => setConfig({ ...config, baseUrl }),
-          value.fieldErrors.baseUrl,
+          value.fieldErrors["baseUrl"],
           "text",
           isLocked(value),
         ))
@@ -353,7 +353,7 @@ export function mountLlmSettingsPanel(
             drafts.customHeadersJson = customHeadersJson
             controller.setSecretDraft({ customHeadersJson })
           },
-          value.fieldErrors.customHeaderNames,
+          value.fieldErrors["customHeaderNames"],
           isLocked(value),
         ))
         grid.append(info(
@@ -376,7 +376,7 @@ export function mountLlmSettingsPanel(
           "Base URL",
           config.baseUrl,
           baseUrl => setConfig({ ...config, baseUrl }),
-          value.fieldErrors.baseUrl,
+          value.fieldErrors["baseUrl"],
           "text",
           isLocked(value),
         ))

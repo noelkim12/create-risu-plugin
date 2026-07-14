@@ -52,18 +52,18 @@ function encodeJson(value: unknown): string {
   return base64Url(new TextEncoder().encode(JSON.stringify(value)))
 }
 
-function pemBytes(pem: string): Uint8Array {
+function pemBytes(pem: string): ArrayBuffer {
   const base64 = pem
     .replace("-----BEGIN PRIVATE KEY-----", "")
     .replace("-----END PRIVATE KEY-----", "")
     .replace(/\s+/g, "")
   const binary = atob(base64)
-  return Uint8Array.from(binary, character => character.charCodeAt(0))
+  return Uint8Array.from(binary, character => character.charCodeAt(0)).buffer
 }
 
 async function signAssertion(credential: StoredCredential, nowMs: number): Promise<string> {
-  const clientEmail = credential.secret.clientEmail
-  const privateKey = credential.secret.privateKey
+  const clientEmail = credential.secret["clientEmail"]
+  const privateKey = credential.secret["privateKey"]
   if (!clientEmail || !privateKey) {
     throw new LlmError("CREDENTIAL_MISSING", "Service Account credential is incomplete.", "google-vertex")
   }
@@ -71,7 +71,7 @@ async function signAssertion(credential: StoredCredential, nowMs: number): Promi
   const header = {
     alg: "RS256",
     typ: "JWT",
-    ...(credential.secret.privateKeyId ? { kid: credential.secret.privateKeyId } : {}),
+    ...(credential.secret["privateKeyId"] ? { kid: credential.secret["privateKeyId"] } : {}),
   }
   const claims = {
     iss: clientEmail,
@@ -123,11 +123,12 @@ export class GoogleServiceAccountTokenProvider {
     if (cached && this.now() < cached.usableUntil) return cached.value
     let request = this.inFlight.get(credential.revision)
     if (!request) {
-      request = this.refresh(credential, this.generation)
-      this.inFlight.set(credential.revision, request)
-      void request.then(
-        () => this.removeInFlight(credential.revision, request),
-        () => this.removeInFlight(credential.revision, request),
+      const refresh = this.refresh(credential, this.generation)
+      request = refresh
+      this.inFlight.set(credential.revision, refresh)
+      void refresh.then(
+        () => this.removeInFlight(credential.revision, refresh),
+        () => this.removeInFlight(credential.revision, refresh),
       )
     }
     return awaitForCaller(request, signal, timeoutMs)
@@ -170,21 +171,21 @@ export class GoogleServiceAccountTokenProvider {
       : null
     if (
       value === null
-      || typeof value.access_token !== "string"
-      || value.access_token === ""
-      || typeof value.expires_in !== "number"
-      || !Number.isFinite(value.expires_in)
-      || value.expires_in <= 0
+      || typeof value["access_token"] !== "string"
+      || value["access_token"] === ""
+      || typeof value["expires_in"] !== "number"
+      || !Number.isFinite(value["expires_in"])
+      || value["expires_in"] <= 0
     ) {
       throw new LlmError("INVALID_RESPONSE", "Google OAuth response is missing token fields.", "google-vertex")
     }
     if (this.generation === generation) {
       this.cache.set(credential.revision, {
-        value: value.access_token,
-        usableUntil: this.now() + value.expires_in * 1000 - REFRESH_SKEW_MS,
+        value: value["access_token"],
+        usableUntil: this.now() + value["expires_in"] * 1000 - REFRESH_SKEW_MS,
       })
     }
-    return value.access_token
+    return value["access_token"]
   }
 
   private removeInFlight(revision: string, request: Promise<string>): void {

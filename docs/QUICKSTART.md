@@ -11,6 +11,10 @@ cd my-plugin
 
 The CLI asks for project name, description, package-name check, and framework. Choose `vanilla` or `svelte`. TypeScript is the only source language.
 
+### Choose optional features
+
+The feature prompt is a checkbox: Space toggles the highlighted item and Enter accepts the selection. Nothing is selected by default. If you enable **LLM client**, install and build the generated project normally, load the bundle in Risu, then open your plugin's **LLM Settings** entry from Risu Settings. Provider secrets remain blank in the form after reload even when a credential is stored.
+
 ## Build For Risuai
 
 ```bash

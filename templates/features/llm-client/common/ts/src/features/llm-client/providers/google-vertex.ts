@@ -38,7 +38,7 @@ export class GoogleVertexProvider implements LlmProvider {
         execution.options.signal,
         timeoutMs,
       )
-      headers.Authorization = `Bearer ${token}`
+      headers["Authorization"] = `Bearer ${token}`
       url = serviceAccountUrl(config)
     }
 
@@ -47,7 +47,7 @@ export class GoogleVertexProvider implements LlmProvider {
       method: "POST",
       headers,
       body: JSON.stringify(toGeminiRequest(execution.request)),
-      signal: execution.options.signal,
+      ...(execution.options.signal === undefined ? {} : { signal: execution.options.signal }),
       timeoutMs,
       networkRoute: "auto",
     })

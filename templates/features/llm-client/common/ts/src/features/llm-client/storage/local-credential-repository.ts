@@ -35,7 +35,7 @@ export function credentialAudienceFor(config: ProviderConfig): string {
 export function createCredentialRecord(
   config: ProviderConfig,
   secret: Record<string, string>,
-  revision = crypto.randomUUID(),
+  revision: string = crypto.randomUUID(),
   updatedAt = Date.now(),
 ): StoredCredential {
   return {
@@ -52,18 +52,18 @@ function isStoredCredential(value: unknown, slot: CredentialSlot): value is Stor
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
   if (
-    record.schemaVersion !== 1
-    || record.slot !== slot
-    || typeof record.audience !== "string"
-    || typeof record.revision !== "string"
-    || typeof record.updatedAt !== "number"
-    || typeof record.secret !== "object"
-    || record.secret === null
-    || Array.isArray(record.secret)
+    record["schemaVersion"] !== 1
+    || record["slot"] !== slot
+    || typeof record["audience"] !== "string"
+    || typeof record["revision"] !== "string"
+    || typeof record["updatedAt"] !== "number"
+    || typeof record["secret"] !== "object"
+    || record["secret"] === null
+    || Array.isArray(record["secret"])
   ) {
     return false
   }
-  return Object.values(record.secret).every(secret => typeof secret === "string")
+  return Object.values(record["secret"]).every(secret => typeof secret === "string")
 }
 
 export function parseServiceAccountJson(value: string, config: GoogleVertexConfig): Record<string, string> {
@@ -77,15 +77,15 @@ export function parseServiceAccountJson(value: string, config: GoogleVertexConfi
     throw new LlmError("CONFIG_INVALID", "Service Account JSON must be an object.", "google-vertex")
   }
   const parsed = decoded as Record<string, unknown>
-  if (parsed.type !== "service_account") {
+  if (parsed["type"] !== "service_account") {
     throw new LlmError("CONFIG_INVALID", "Credential type must be service_account.", "google-vertex")
   }
-  if (parsed.token_uri !== undefined && parsed.token_uri !== "https://oauth2.googleapis.com/token") {
+  if (parsed["token_uri"] !== undefined && parsed["token_uri"] !== "https://oauth2.googleapis.com/token") {
     throw new LlmError("CONFIG_INVALID", "Service Account token_uri must use Google's OAuth endpoint.", "google-vertex")
   }
-  const clientEmail = typeof parsed.client_email === "string" ? parsed.client_email.trim() : ""
-  const privateKey = typeof parsed.private_key === "string" ? parsed.private_key : ""
-  const projectId = typeof parsed.project_id === "string" ? parsed.project_id.trim() : config.projectId.trim()
+  const clientEmail = typeof parsed["client_email"] === "string" ? parsed["client_email"].trim() : ""
+  const privateKey = typeof parsed["private_key"] === "string" ? parsed["private_key"] : ""
+  const projectId = typeof parsed["project_id"] === "string" ? parsed["project_id"].trim() : config.projectId.trim()
   if (!clientEmail || !privateKey || !projectId) {
     throw new LlmError("CONFIG_INVALID", "Service Account JSON requires project_id, client_email, and private_key.", "google-vertex")
   }
@@ -99,7 +99,7 @@ export function parseServiceAccountJson(value: string, config: GoogleVertexConfi
     projectId,
     clientEmail,
     privateKey,
-    ...(typeof parsed.private_key_id === "string" ? { privateKeyId: parsed.private_key_id } : {}),
+    ...(typeof parsed["private_key_id"] === "string" ? { privateKeyId: parsed["private_key_id"] } : {}),
   }
 }
 
@@ -107,7 +107,7 @@ export class LocalCredentialRepository {
   constructor(
     private readonly storageFactory: LocalStorageFactory = defaultLocalStorageFactory,
     private readonly pluginName?: string,
-    private readonly revision: () => string = () => crypto.randomUUID(),
+    private readonly revision: () => string = (): string => crypto.randomUUID(),
     private readonly now: () => number = () => Date.now(),
   ) {}
 

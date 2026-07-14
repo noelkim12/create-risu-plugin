@@ -41,13 +41,13 @@ export function fromGeminiResponse(
   value: unknown,
 ): LlmResponse {
   const root = record(value)
-  const candidates = root?.candidates
+  const candidates = root?.["candidates"]
   const firstCandidate = Array.isArray(candidates) ? record(candidates[0]) : null
-  const content = record(firstCandidate?.content)
-  const parts = content?.parts
+  const content = record(firstCandidate?.["content"])
+  const parts = content?.["parts"]
   const text = Array.isArray(parts)
     ? parts
-      .map(part => record(part)?.text)
+      .map(part => record(part)?.["text"])
       .filter((part): part is string => typeof part === "string")
       .join("")
     : ""
@@ -55,10 +55,10 @@ export function fromGeminiResponse(
     throw new LlmError("INVALID_RESPONSE", "Gemini response did not contain text.", provider)
   }
 
-  const usageMetadata = record(root?.usageMetadata)
-  const inputTokens = optionalNumber(usageMetadata?.promptTokenCount)
-  const outputTokens = optionalNumber(usageMetadata?.candidatesTokenCount)
-  const totalTokens = optionalNumber(usageMetadata?.totalTokenCount)
+  const usageMetadata = record(root?.["usageMetadata"])
+  const inputTokens = optionalNumber(usageMetadata?.["promptTokenCount"])
+  const outputTokens = optionalNumber(usageMetadata?.["candidatesTokenCount"])
+  const totalTokens = optionalNumber(usageMetadata?.["totalTokenCount"])
   const hasUsage = inputTokens !== undefined
     || outputTokens !== undefined
     || totalTokens !== undefined
@@ -67,9 +67,13 @@ export function fromGeminiResponse(
     provider,
     model,
     text,
-    finishReason: typeof firstCandidate?.finishReason === "string"
-      ? firstCandidate.finishReason
+    finishReason: typeof firstCandidate?.["finishReason"] === "string"
+      ? firstCandidate["finishReason"]
       : null,
-    ...(hasUsage ? { usage: { inputTokens, outputTokens, totalTokens } } : {}),
+    ...(hasUsage ? { usage: {
+      ...(inputTokens === undefined ? {} : { inputTokens }),
+      ...(outputTokens === undefined ? {} : { outputTokens }),
+      ...(totalTokens === undefined ? {} : { totalTokens }),
+    } } : {}),
   }
 }

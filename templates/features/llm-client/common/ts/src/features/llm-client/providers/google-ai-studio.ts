@@ -23,7 +23,7 @@ export class GoogleAiStudioProvider implements LlmProvider {
         "x-goog-api-key": apiKey,
       },
       body: JSON.stringify(toGeminiRequest(execution.request)),
-      signal: execution.options.signal,
+      ...(execution.options.signal === undefined ? {} : { signal: execution.options.signal }),
       timeoutMs: execution.options.timeoutMs ?? config.timeoutMs,
       networkRoute: "auto",
     })

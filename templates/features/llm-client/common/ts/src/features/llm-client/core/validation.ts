@@ -91,43 +91,43 @@ function isProviderId(value: unknown): value is ProviderId {
 
 export function parseStoredSettings(value: unknown): LlmSettings {
   const root = object(value)
-  const providers = object(root?.providers)
-  if (root?.schemaVersion !== 1 || !isProviderId(root.activeProvider) || providers === null) {
+  const providers = object(root?.["providers"])
+  if (root?.["schemaVersion"] !== 1 || !isProviderId(root["activeProvider"]) || providers === null) {
     throw new LlmError("CONFIG_INVALID", "Stored LLM settings have an invalid schema.")
   }
 
   for (const provider of PROVIDER_IDS) {
     const config = object(providers[provider])
     if (
-      config?.provider !== provider
-      || typeof config.model !== "string"
-      || typeof config.timeoutMs !== "number"
+      config?.["provider"] !== provider
+      || typeof config["model"] !== "string"
+      || typeof config["timeoutMs"] !== "number"
     ) {
       throw new LlmError("CONFIG_INVALID", `Stored ${provider} settings are malformed.`, provider)
     }
     if (provider === "google-vertex") {
       if (
-        (config.authMode !== "api-key" && config.authMode !== "service-account")
-        || typeof config.projectId !== "string"
-        || typeof config.location !== "string"
+        (config["authMode"] !== "api-key" && config["authMode"] !== "service-account")
+        || typeof config["projectId"] !== "string"
+        || typeof config["location"] !== "string"
       ) {
         throw new LlmError("CONFIG_INVALID", "Stored Vertex settings are malformed.", provider)
       }
     }
     if (provider === "openai-compatible") {
       if (
-        typeof config.baseUrl !== "string"
-        || (config.authMode !== "none" && config.authMode !== "bearer")
-        || !Array.isArray(config.customHeaderNames)
-        || config.customHeaderNames.some(name => typeof name !== "string")
+        typeof config["baseUrl"] !== "string"
+        || (config["authMode"] !== "none" && config["authMode"] !== "bearer")
+        || !Array.isArray(config["customHeaderNames"])
+        || config["customHeaderNames"].some(name => typeof name !== "string")
       ) {
         throw new LlmError("CONFIG_INVALID", "Stored OpenAI-compatible settings are malformed.", provider)
       }
     }
     if (provider === "ollama") {
       if (
-        typeof config.baseUrl !== "string"
-        || (config.authMode !== "none" && config.authMode !== "bearer")
+        typeof config["baseUrl"] !== "string"
+        || (config["authMode"] !== "none" && config["authMode"] !== "bearer")
       ) {
         throw new LlmError("CONFIG_INVALID", "Stored Ollama settings are malformed.", provider)
       }
@@ -138,29 +138,29 @@ export function parseStoredSettings(value: unknown): LlmSettings {
 
 export function validateProviderConfig(config: ProviderConfig): FieldErrors {
   const errors: Record<string, string> = {}
-  if (config.model.trim() === "") errors.model = "Model is required."
+  if (config.model.trim() === "") errors["model"] = "Model is required."
   if (!Number.isInteger(config.timeoutMs) || config.timeoutMs < 1_000 || config.timeoutMs > 300_000) {
-    errors.timeoutMs = "Timeout must be an integer from 1000 to 300000 milliseconds."
+    errors["timeoutMs"] = "Timeout must be an integer from 1000 to 300000 milliseconds."
   }
 
   if (config.provider === "google-vertex" && config.authMode === "service-account") {
     if (config.projectId.trim() === "") {
-      errors.projectId = "Project ID is required for Service Account authentication."
+      errors["projectId"] = "Project ID is required for Service Account authentication."
     }
     if (config.location.trim() === "") {
-      errors.location = "Location is required for Service Account authentication."
+      errors["location"] = "Location is required for Service Account authentication."
     } else if (!/^(?:global|[a-z][a-z0-9-]{1,62})$/.test(config.location.trim())) {
-      errors.location = "Location must be global or a lowercase Google Cloud region name."
+      errors["location"] = "Location must be global or a lowercase Google Cloud region name."
     }
   }
 
   if (config.provider === "openai-compatible" || config.provider === "ollama") {
     const error = validateEndpointUrl(config.baseUrl)
-    if (error) errors.baseUrl = error
+    if (error) errors["baseUrl"] = error
   }
   if (config.provider === "openai-compatible") {
     const error = validateCustomHeaderNames(config.customHeaderNames)
-    if (error) errors.customHeaderNames = error
+    if (error) errors["customHeaderNames"] = error
   }
 
   return errors

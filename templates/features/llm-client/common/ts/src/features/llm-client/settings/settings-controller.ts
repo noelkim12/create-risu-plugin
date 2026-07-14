@@ -121,10 +121,13 @@ function cloneSettings(settings: LlmSettings): LlmSettings {
   return {
     ...settings,
     providers: {
-      "google-ai-studio": cloneProviderConfig(settings.providers["google-ai-studio"]),
-      "google-vertex": cloneProviderConfig(settings.providers["google-vertex"]),
-      "openai-compatible": cloneProviderConfig(settings.providers["openai-compatible"]),
-      ollama: cloneProviderConfig(settings.providers.ollama),
+      "google-ai-studio": { ...settings.providers["google-ai-studio"] },
+      "google-vertex": { ...settings.providers["google-vertex"] },
+      "openai-compatible": {
+        ...settings.providers["openai-compatible"],
+        customHeaderNames: [...settings.providers["openai-compatible"].customHeaderNames],
+      },
+      ollama: { ...settings.providers.ollama },
     },
   }
 }
@@ -364,7 +367,7 @@ export class LlmSettingsController {
       )
       return createCredentialRecord(config, {
         ...headers,
-        apiKey: apiKey || stored?.secret.apiKey || "",
+        apiKey: apiKey || stored?.secret["apiKey"] || "",
       })
     }
     if (apiKey !== "") {
@@ -404,7 +407,7 @@ export class LlmSettingsController {
             )
             await this.credentialRepository.saveApiKey(
               config,
-              apiKey || stored?.secret.apiKey || "",
+              apiKey || stored?.secret["apiKey"] || "",
               preservedHeaders,
             )
           }
