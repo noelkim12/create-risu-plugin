@@ -56,3 +56,10 @@ npm publish --access public
 ## Optional Update URL
 
 Generated plugin builds omit `//@update-url` by default. Add it only for a hosted plugin file with a stable URL. Manual Risuai import and file-based hot reload don't need it.
+
+## LLM client release gate
+
+1. Run `npm run test:all` and require all unit tests plus Vanilla/Svelte OFF/ON smoke builds to pass.
+2. Run `npm pack --dry-run` and verify that every `templates/features/llm-client` file is present while tests, temporary fixtures, `.omo/`, and credentials are absent.
+3. Record the Risu version used for manual compatibility testing in the release notes.
+4. Do not publish if a manual fetch-log or console inspection exposes an API key, Authorization header, JWT assertion, OAuth access token, or private key.

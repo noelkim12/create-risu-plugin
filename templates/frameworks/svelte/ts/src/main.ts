@@ -1,80 +1,50 @@
-import { mount, unmount } from "svelte";
-import App from "./App.svelte";
-import { PLUGIN_DISPLAY_NAME, PLUGIN_NAME } from "./constants/plugin";
-import ErrorPanel from "./ErrorPanel.svelte";
-import { ChatContext, type ResolvedChatContext } from "./helpers/chat-context";
-import { getGlobalStorage, setGlobalStorage } from "./helpers/plugin-storage";
-import "./styles.css";
+import { mount, unmount } from "svelte"
+import App from "./App.svelte"
+import { PLUGIN_DISPLAY_NAME, PLUGIN_NAME } from "./constants/plugin"
+import ErrorPanel from "./ErrorPanel.svelte"
+import { registerFeatures } from "./features/generated"
+import { ChatContext, type ResolvedChatContext } from "./helpers/chat-context"
+import { getGlobalStorage, setGlobalStorage } from "./helpers/plugin-storage"
+import { containerHost } from "./ui/container-host"
+import "./styles.css"
 
 type AppProps = {
-  readonly openCount: number;
-  readonly context: ResolvedChatContext;
-  readonly onClose: () => Promise<void>;
-};
-
-let mountedApp: ReturnType<typeof mount> | null = null;
-
-const renderErrorPanel = (message: string): void => {
-  document.body.replaceChildren();
-  mountedApp = mount(ErrorPanel, {
-    target: document.body,
-    props: {
-      message,
-      onClose: closePanel,
-    },
-  });
-};
-
-const unmountCurrentApp = (): void => {
-  if (mountedApp === null) {
-    return;
-  }
-
-  unmount(mountedApp);
-  mountedApp = null;
-};
-
-const closePanel = async (): Promise<void> => {
-  unmountCurrentApp();
-  await risuai.hideContainer();
-};
+  readonly openCount: number
+  readonly context: ResolvedChatContext
+  readonly onClose: () => Promise<void>
+}
 
 const readNextOpenCount = async (): Promise<number> => {
-  const storedCount = await getGlobalStorage<unknown>("openCount");
-  const currentCount = typeof storedCount === "number" && Number.isInteger(storedCount) ? storedCount : 0;
-  const openCount = currentCount + 1;
-  await setGlobalStorage("openCount", openCount);
-  return openCount;
-};
+  const storedCount = await getGlobalStorage<unknown>("openCount")
+  const currentCount = typeof storedCount === "number" && Number.isInteger(storedCount)
+    ? storedCount
+    : 0
+  const openCount = currentCount + 1
+  await setGlobalStorage("openCount", openCount)
+  return openCount
+}
 
 const openPanel = async (): Promise<void> => {
-  await risuai.showContainer("fullscreen");
-
-  try {
-    unmountCurrentApp();
-    document.body.replaceChildren();
-
-    const props: AppProps = {
-      openCount: await readNextOpenCount(),
-      context: await new ChatContext().resolve(),
-      onClose: closePanel,
-    };
-
-    mountedApp = mount(App, {
-      target: document.body,
-      props,
-    });
-  } catch (error) {
-    unmountCurrentApp();
-    const message = error instanceof Error ? error.message : "Unknown plugin error";
-    console.error(`${PLUGIN_DISPLAY_NAME} failed to open`, error);
-    renderErrorPanel(message);
-  }
-};
-
-const openPanelFromButton = (): void => {
-  void openPanel();
-};
+  await containerHost.open(async ({ target, close }) => {
+    try {
+      const props: AppProps = {
+        openCount: await readNextOpenCount(),
+        context: await new ChatContext().resolve(),
+        onClose: close,
+      }
+      const app = mount(App, { target, props })
+      return () => unmount(app)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown plugin error"
+      console.error(`${PLUGIN_DISPLAY_NAME} failed to open`, error)
+      const errorPanel = mount(ErrorPanel, {
+        target,
+        props: { message, onClose: close },
+      })
+      return () => unmount(errorPanel)
+    }
+  })
+}
 
 await risuai.registerButton(
   {
@@ -84,8 +54,8 @@ await risuai.registerButton(
     location: "action",
     id: `${PLUGIN_NAME}-action`,
   },
-  openPanelFromButton,
-);
+  () => void openPanel(),
+)
 
 await risuai.registerSetting(
   `${PLUGIN_DISPLAY_NAME} Settings`,
@@ -93,8 +63,8 @@ await risuai.registerSetting(
   '<span aria-hidden="true">R</span>',
   "html",
   `${PLUGIN_NAME}-settings`,
-);
+)
 
-await risuai.onUnload(() => {
-  unmountCurrentApp();
-});
+await registerFeatures(containerHost)
+
+await risuai.onUnload(() => containerHost.dispose())

@@ -38,6 +38,12 @@ npx create-risu-plugin my-plugin --framework svelte --description "My plugin" --
 
 The name must be kebab-case (`my-risu-plugin`). On success the last stdout line is `created: <absolute path>`. Exit code is non-zero on failure.
 
+## Optional features
+
+After choosing Vanilla or Svelte, the CLI shows an optional-feature checkbox. Features are OFF by default; press Space to toggle **LLM client — call external LLM APIs directly**, then Enter to continue.
+
+When enabled, the generated project contains `src/features/llm-client/`, a framework-specific settings screen, `src/features/generated.ts`, and `docs/llm-client.md`. The feature calls Google AI Studio, Google Vertex, OpenAI-compatible APIs, and Ollama directly; it does not register a Risu model provider. Projects generated with the checkbox clear contain no LLM-client source.
+
 ## Risuai v3 Development Flow
 
 1. Run `npm run dev` to start Vite watch mode, or run `npm run build` for a one-time build.

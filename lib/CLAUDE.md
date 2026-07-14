@@ -75,3 +75,7 @@ These are not part of the current scaffold and shouldn't reappear in default doc
 - Runtime updater UI or updater modules.
 - Alternate bundlers.
 - Reverse proxy setup docs.
+
+## Feature-change rule
+
+A change to an optional feature is incomplete unless the same change updates its catalog entry, common overlay, Vanilla overlay, Svelte overlay, focused unit tests, and all four generated-project smoke combinations. Never bypass `FeatureComposer` with feature-specific branches in `ProjectGenerator`, and never allow an overlay collision to overwrite an existing file.

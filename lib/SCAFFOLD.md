@@ -103,3 +103,9 @@ Default scaffold code should not include:
 - Main Risuai app DOM access.
 
 If one of those topics is needed for historical context, keep it outside the default workflow and mark it as historical. Prefer removing stale references entirely.
+
+## Optional feature composition
+
+`lib/features/featureCatalog.js` is the only registry for feature IDs, prompt labels, template directories, and registration exports. `FeatureComposer` copies `templates/features/<id>/common/ts` first and then `templates/features/<id>/<framework>/ts`. Both layers are copied with overwrite disabled, so a feature cannot silently replace a base-template file or another feature's file.
+
+The composer always regenerates `src/features/generated.ts`. With no selected features it exports a no-op `registerFeatures`; with `llm-client` selected it imports and awaits `registerLlmClientFeature` exactly once. Changes to a feature must pass the Vanilla OFF, Vanilla ON, Svelte OFF, and Svelte ON generation matrix.
