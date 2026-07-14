@@ -19,10 +19,16 @@ export default defineConfig({
         find: /^\.\.\/\.\.\/\.\.\/constants\/plugin$/,
         replacement: path.join(root, "templates/frameworks/vanilla/ts/src/constants/plugin.ts"),
       },
-      ...["core", "network", "settings", "storage"].map(directory => ({
-        find: path.join(vanillaFeature, directory),
-        replacement: path.join(commonFeature, directory),
-      })),
+      ...["core", "network", "settings", "storage"].flatMap(directory => [
+        {
+          find: new RegExp(`^\\.\\.\\/${directory}(?=\\/|$)`),
+          replacement: path.join(commonFeature, directory),
+        },
+        {
+          find: path.join(vanillaFeature, directory),
+          replacement: path.join(commonFeature, directory),
+        },
+      ]),
     ],
   },
   test: {
