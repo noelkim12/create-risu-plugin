@@ -41,6 +41,10 @@ describe("ProjectGenerator feature matrix", () => {
 
         const main = await fs.readFile(path.join(target, "src/main.ts"), "utf8");
         expect(main).toContain("await registerFeatures(containerHost)");
+
+        const readme = await fs.readFile(path.join(target, "README.md"), "utf8");
+        expect(readme.includes("## LLM Client")).toBe(enabled);
+        expect(readme.includes("llmClient.complete")).toBe(enabled);
       });
     }
   }
