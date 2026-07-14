@@ -75,12 +75,33 @@ for (const framework of ["vanilla", "svelte"]) {
     if (enabled) {
       assert(featureFiles.includes("core/llm-client.ts"), `${name}: common client source is missing`);
       assert(featureFiles.includes("register.ts"), `${name}: framework registration source is missing`);
-      assert(
-        featureFiles.some(file => framework === "svelte"
-          ? file.endsWith("LlmSettingsPanel.svelte")
-          : file.endsWith("settings-panel.ts")),
-        `${name}: selected framework settings UI is missing`,
-      );
+      if (framework === "vanilla") {
+        assert(
+          featureFiles.includes("ui/settings-panel.ts"),
+          `${name}: selected Vanilla settings UI is missing`,
+        );
+        assert(
+          featureFiles.includes("ui/settings-panel.css"),
+          `${name}: selected Vanilla settings UI stylesheet is missing`,
+        );
+        assert(
+          !featureFiles.includes("ui/LlmSettingsPanel.svelte"),
+          `${name}: vanilla output unexpectedly contains Svelte settings UI`,
+        );
+      } else {
+        assert(
+          featureFiles.includes("ui/LlmSettingsPanel.svelte"),
+          `${name}: selected Svelte settings UI is missing`,
+        );
+        assert(
+          !featureFiles.includes("ui/settings-panel.ts"),
+          `${name}: svelte output unexpectedly contains Vanilla settings UI`,
+        );
+        assert(
+          !featureFiles.includes("ui/settings-panel.css"),
+          `${name}: svelte output unexpectedly contains Vanilla settings UI stylesheet`,
+        );
+      }
     }
 
     for (const relative of featureFiles) {
