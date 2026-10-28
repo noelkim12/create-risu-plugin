@@ -10,6 +10,7 @@
     "dist"
   ],
   "scripts": {
+    "mock": "vite --config vite.mock.config.ts --open /dev/",
     "dev": "vite build --watch",
     "build": "vite build",
     "typecheck": "tsc --noEmit"

@@ -1,0 +1,254 @@
+/* Embedding section using the shared AI Services shell tokens. */
+.ai-embedding {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ai-embedding h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.ai-embedding-intro {
+  margin: 8px 0 16px;
+  color: #b5b5b5;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.ai-embedding-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.ai-embedding-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  border: 1px solid #313131;
+  background: #000000;
+  padding: 12px 14px;
+}
+
+.ai-embedding-meta {
+  flex: 1 1 240px;
+  display: grid;
+  gap: 4px;
+}
+
+.ai-embedding-name {
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+}
+
+.ai-embedding-detail {
+  font-size: 0.78rem;
+  color: #b5b5b5;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ai-embedding-endpoint {
+  font-size: 0.82rem;
+  color: #ffce3e;
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.ai-embedding-empty {
+  border: 1px dashed #313131;
+  padding: 16px;
+  color: #7d7d7d;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+
+.ai-embedding-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-embedding-row-actions button,
+.ai-embedding-actions button {
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 0;
+  padding: 7px 16px;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.ai-embedding-row-actions button:hover:not(:disabled),
+.ai-embedding-actions button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #ffffff;
+}
+
+.ai-embedding-actions button.ai-btn-primary {
+  border-color: #ffc000;
+  background: #ffc000;
+  color: #000000;
+  font-weight: 700;
+}
+
+.ai-embedding-actions button.ai-btn-primary:hover:not(:disabled) {
+  background: #917300;
+  border-color: #917300;
+  color: #ffffff;
+}
+
+.ai-embedding-row-actions button.ai-btn-danger:hover:not(:disabled) {
+  border-color: #ff5a5a;
+  color: #ff5a5a;
+  background: rgba(255, 90, 90, 0.08);
+}
+
+.ai-embedding-row-actions button:disabled,
+.ai-embedding-actions button:disabled {
+  cursor: wait;
+  opacity: 0.4;
+}
+
+.ai-embedding-row-actions button:focus-visible,
+.ai-embedding-actions button:focus-visible {
+  outline: 2px solid #29abe2;
+  outline-offset: 2px;
+}
+
+.ai-embedding-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  padding: 16px;
+  border: 1px solid #313131;
+  background: #181818;
+}
+
+.ai-embedding-editor h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.ai-embedding-field {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-width: 0;
+}
+
+.ai-embedding-field label {
+  font-weight: 400;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.ai-embedding-field input,
+.ai-embedding-field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #313131;
+  border-radius: 0;
+  padding: 8px 10px;
+  background: #000000;
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.ai-embedding-field input[type="checkbox"] {
+  width: 20px;
+  min-height: 20px;
+  height: 20px;
+  accent-color: #ffc000;
+}
+
+.ai-embedding-field input:focus-visible,
+.ai-embedding-field select:focus-visible {
+  outline: 2px solid #29abe2;
+  outline-offset: 1px;
+}
+
+.ai-embedding-field input:disabled,
+.ai-embedding-field select:disabled {
+  cursor: wait;
+  opacity: 0.4;
+}
+
+.ai-embedding-disclosure {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  padding: 12px 16px;
+  border: 1px solid #313131;
+  background: #000000;
+}
+
+.ai-embedding-disclosure summary {
+  grid-column: 1 / -1;
+  cursor: pointer;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.ai-embedding-disclosure summary:focus-visible {
+  outline: 2px solid #29abe2;
+  outline-offset: 2px;
+}
+
+.ai-embedding-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-embedding-status {
+  margin: 12px 0 0;
+  color: #f5f5f5;
+  font-size: 0.88rem;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 680px) {
+  .ai-embedding-editor {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .ai-embedding-disclosure {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai-embedding-row {
+    flex-direction: column;
+  }
+}

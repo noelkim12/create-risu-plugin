@@ -1,5 +1,4 @@
 import { LlmError } from "../core/errors"
-import type { StoredCredential } from "../core/types"
 import type { HttpTransport } from "../network/native-fetch-transport"
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -9,6 +8,10 @@ const REFRESH_SKEW_MS = 60_000
 const REFRESH_TIMEOUT_MS = 60_000
 
 type CachedToken = { readonly value: string; readonly usableUntil: number }
+type ServiceAccountCredential = {
+  readonly revision: string
+  readonly secret: Readonly<Record<string, string>>
+}
 
 function awaitForCaller<T>(
   promise: Promise<T>,
@@ -61,7 +64,7 @@ function pemBytes(pem: string): ArrayBuffer {
   return Uint8Array.from(binary, character => character.charCodeAt(0)).buffer
 }
 
-async function signAssertion(credential: StoredCredential, nowMs: number): Promise<string> {
+async function signAssertion(credential: ServiceAccountCredential, nowMs: number): Promise<string> {
   const clientEmail = credential.secret["clientEmail"]
   const privateKey = credential.secret["privateKey"]
   if (!clientEmail || !privateKey) {
@@ -115,7 +118,7 @@ export class GoogleServiceAccountTokenProvider {
   ) {}
 
   async getAccessToken(
-    credential: StoredCredential,
+    credential: ServiceAccountCredential,
     signal?: AbortSignal,
     timeoutMs = 60_000,
   ): Promise<string> {
@@ -135,7 +138,7 @@ export class GoogleServiceAccountTokenProvider {
   }
 
   private async refresh(
-    credential: StoredCredential,
+    credential: ServiceAccountCredential,
     generation: number,
   ): Promise<string> {
     const assertion = await signAssertion(credential, this.now())

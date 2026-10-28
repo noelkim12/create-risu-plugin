@@ -2,6 +2,7 @@ import type { ProviderId } from "./types"
 
 export type LlmErrorCode =
   | "CONFIG_INVALID"
+  | "MODEL_CONFIG_MISSING"
   | "CREDENTIAL_MISSING"
   | "AUTH_FAILED"
   | "RATE_LIMITED"
@@ -11,6 +12,7 @@ export type LlmErrorCode =
   | "HTTP_ERROR"
   | "INVALID_RESPONSE"
   | "UNSUPPORTED_RUNTIME"
+  | "UNSUPPORTED_FEATURE"
 
 export class LlmError extends Error {
   constructor(

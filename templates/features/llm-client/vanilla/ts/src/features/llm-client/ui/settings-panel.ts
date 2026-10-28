@@ -1,6 +1,9 @@
-import type { ProviderConfig, ProviderId } from "../core/types"
+// allow: SIZE_OK - the framework renderer keeps the complete model editor in one DOM lifecycle.
+import { isCredentialId } from "../../credential-manager/core/validation"
+import { MODEL_FLAGS } from "../core/types"
+import type { ProviderId, ReasoningEffort, SavedModelConfig } from "../core/types"
 import { isLocalNetworkUrl } from "../network/url-policy"
-import type { LlmSettingsController, SettingsState } from "../settings/settings-controller"
+import type { LlmSettingsController, SettingsOperation, SettingsState } from "../settings/settings-controller"
 
 export interface MountedLlmSettingsPanel {
   destroy(): void
@@ -11,53 +14,75 @@ const PROVIDER_LABELS: Readonly<Record<ProviderId, string>> = {
   "google-vertex": "Google Vertex",
   "openai-compatible": "OpenAI-compatible",
   ollama: "Ollama",
+  deepseek: "DeepSeek",
 }
+const LOCKED_OPERATIONS: readonly SettingsOperation[] = ["loading", "saving", "deleting", "testing"]
+const REASONING_LEVELS: readonly ReasoningEffort[] = ["minimal", "low", "medium", "high"]
 
-function option(value: string, label: string): HTMLOptionElement {
-  const element = document.createElement("option")
-  element.value = value
+function button(label: string, className = ""): HTMLButtonElement {
+  const element = document.createElement("button")
+  element.type = "button"
   element.textContent = label
+  element.className = className
   return element
 }
 
-function field(
-  id: string,
-  labelText: string,
-  control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
-  error = "",
-): HTMLDivElement {
+function info(text: string, className = ""): HTMLParagraphElement {
+  const element = document.createElement("p")
+  element.textContent = text
+  element.className = className
+  return element
+}
+
+function field(labelText: string, control: HTMLElement, error = ""): HTMLDivElement {
   const wrapper = document.createElement("div")
   wrapper.className = "llm-field"
   const label = document.createElement("label")
-  label.htmlFor = id
   label.textContent = labelText
-  const errorElement = document.createElement("p")
-  errorElement.id = `${id}-error`
-  errorElement.className = "llm-error"
-  errorElement.textContent = error
-  control.id = id
-  control.setAttribute("aria-describedby", errorElement.id)
-  control.setAttribute("aria-invalid", String(error !== ""))
-  wrapper.append(label, control, errorElement)
+  if (control.id !== "") label.htmlFor = control.id
+  wrapper.append(label, control)
+  if (error !== "") wrapper.append(info(error, "llm-error"))
   return wrapper
 }
 
-function textInput(
+function inputField(
   id: string,
   label: string,
   value: string,
   onInput: (value: string) => void,
-  error = "",
-  type: "text" | "password" | "number" = "text",
+  type: "text" | "number" = "text",
   disabled = false,
+  error = "",
 ): HTMLDivElement {
   const input = document.createElement("input")
+  input.id = id
   input.type = type
   input.value = value
-  input.autocomplete = type === "password" ? "new-password" : "off"
   input.disabled = disabled
   input.addEventListener("input", () => onInput(input.value))
-  return field(id, label, input, error)
+  return field(label, input, error)
+}
+
+function selectField(
+  id: string,
+  label: string,
+  value: string,
+  options: readonly (readonly [string, string])[],
+  onChange: (value: string) => void,
+  disabled = false,
+): HTMLDivElement {
+  const select = document.createElement("select")
+  select.id = id
+  for (const [optionValue, optionLabel] of options) {
+    const option = document.createElement("option")
+    option.value = optionValue
+    option.textContent = optionLabel
+    select.append(option)
+  }
+  select.value = value
+  select.disabled = disabled
+  select.addEventListener("change", () => onChange(select.value))
+  return field(label, select)
 }
 
 function textareaField(
@@ -65,442 +90,217 @@ function textareaField(
   label: string,
   value: string,
   onInput: (value: string) => void,
-  error = "",
-  disabled = false,
+  disabled: boolean,
 ): HTMLDivElement {
   const textarea = document.createElement("textarea")
-  textarea.rows = 7
+  textarea.id = id
+  textarea.rows = 5
   textarea.value = value
-  textarea.autocomplete = "off"
   textarea.disabled = disabled
   textarea.addEventListener("input", () => onInput(textarea.value))
-  return field(id, label, textarea, error)
+  const wrapper = field(label, textarea)
+  wrapper.classList.add("llm-field-wide")
+  return wrapper
 }
 
-function selectField(
-  id: string,
-  label: string,
-  value: string,
-  entries: readonly (readonly [string, string])[],
-  onChange: (value: string) => void,
-  error = "",
-  disabled = false,
-): HTMLDivElement {
-  const select = document.createElement("select")
-  for (const [entryValue, entryLabel] of entries) {
-    select.append(option(entryValue, entryLabel))
+function numberOrUndefined(value: string): number | undefined {
+  const trimmed = value.trim()
+  if (trimmed === "") return undefined
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function reasoningSummary(reasoning: SavedModelConfig["reasoning"]): string {
+  if (reasoning.provider === "google-ai-studio" || reasoning.provider === "google-vertex") {
+    return reasoning.level === null ? "thinking off" : `thinking ${reasoning.level}`
   }
-  select.value = value
-  select.disabled = disabled
-  select.addEventListener("change", () => onChange(select.value))
-  return field(id, label, select, error)
-}
-
-function info(text: string, className = ""): HTMLParagraphElement {
-  const element = document.createElement("p")
-  element.className = className
-  element.textContent = text
-  return element
-}
-
-interface FocusSnapshot {
-  readonly id: string
-  readonly selectionDirection?: "backward" | "forward" | "none"
-  readonly selectionEnd?: number
-  readonly selectionStart?: number
-}
-
-function captureFocus(target: HTMLElement): FocusSnapshot | null {
-  const active = document.activeElement
-  if (!(active instanceof HTMLElement) || !target.contains(active) || active.id === "") return null
-  if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
-    return {
-      id: active.id,
-      selectionDirection: active.selectionDirection ?? "none",
-      ...(active.selectionEnd === null ? {} : { selectionEnd: active.selectionEnd }),
-      ...(active.selectionStart === null ? {} : { selectionStart: active.selectionStart }),
-    }
-  }
-  return { id: active.id }
-}
-
-function restoreFocus(target: HTMLElement, snapshot: FocusSnapshot | null): void {
-  if (snapshot === null) return
-  const next = [...target.querySelectorAll<HTMLElement>("[id]")]
-    .find(element => element.id === snapshot.id)
-  if (!next || next.hidden || ("disabled" in next && next.disabled === true)) return
-  next.focus()
-  if (
-    (next instanceof HTMLInputElement || next instanceof HTMLTextAreaElement)
-    && snapshot.selectionStart !== undefined
-    && snapshot.selectionEnd !== undefined
-  ) {
-    const length = next.value.length
-    next.setSelectionRange(
-      Math.min(snapshot.selectionStart, length),
-      Math.min(snapshot.selectionEnd, length),
-      snapshot.selectionDirection,
-    )
-  }
+  if (reasoning.provider === "openai-compatible") return reasoning.effort === null ? "effort none" : `effort ${reasoning.effort}`
+  return reasoning.enabled ? "reasoning on" : "reasoning off"
 }
 
 export function mountLlmSettingsPanel(
   target: HTMLElement,
   controller: LlmSettingsController,
-  onClose: () => Promise<void>,
 ): MountedLlmSettingsPanel {
   let state: SettingsState | null = null
-  const drafts = {
-    apiKey: "",
-    serviceAccountJson: "",
-    customHeadersJson: "",
-  }
+  let modelProvider: ProviderId = "google-ai-studio"
 
-  const clearDrafts = (): void => {
-    drafts.apiKey = ""
-    drafts.serviceAccountJson = ""
-    drafts.customHeadersJson = ""
-  }
-
-  const isLocked = (value = state): boolean => value === null
+  const isLocked = (value: SettingsState | null = state): boolean => value === null
     || !value.loaded
-    || ["loading", "saving", "clearing", "resetting", "testing"].includes(value.operation)
+    || LOCKED_OPERATIONS.includes(value.operation)
 
-  const setConfig = (config: ProviderConfig): void => {
-    if (!isLocked()) controller.updateConfig(config)
+  const updateModel = (patch: Readonly<Record<string, unknown>>): void => {
+    if (state?.modelDraft === null || state?.modelDraft === undefined || isLocked()) return
+    controller.updateModelDraft({ ...state.modelDraft, ...patch } as SavedModelConfig)
   }
 
-  const appendCommonFields = (grid: HTMLDivElement, value: SettingsState): void => {
-    const config = value.activeConfig
-    grid.append(selectField(
-      "llm-provider",
-      "Provider",
-      config.provider,
-      Object.entries(PROVIDER_LABELS),
-      next => {
-        if (isLocked()) return
-        clearDrafts()
-        controller.selectProvider(next as ProviderId)
-      },
-      "",
-      isLocked(value),
-    ))
-    grid.append(textInput(
-      "llm-model",
-      "Model",
-      config.model,
-      model => setConfig({ ...config, model } as ProviderConfig),
-      value.fieldErrors["model"],
-      "text",
-      isLocked(value),
-    ))
-    grid.append(textInput(
-      "llm-timeout",
-      "Timeout (ms)",
-      String(config.timeoutMs),
-      timeout => setConfig({ ...config, timeoutMs: Number(timeout) } as ProviderConfig),
-      value.fieldErrors["timeoutMs"],
-      "number",
-      isLocked(value),
-    ))
-  }
-
-  const appendApiKey = (grid: HTMLElement, optional = false): void => {
-    grid.append(textInput(
-      "llm-api-key",
-      optional ? "API key (optional)" : "API key",
-      drafts.apiKey,
-      apiKey => {
-        if (isLocked()) return
-        drafts.apiKey = apiKey
-        controller.setSecretDraft({ apiKey })
-      },
-      "",
-      "password",
-      isLocked(),
-    ))
-    grid.append(info("Leave blank to preserve the stored key.", "llm-help"))
-  }
-
-  const appendVertexFields = (grid: HTMLDivElement, value: SettingsState): void => {
-    const config = value.activeConfig
-    if (config.provider !== "google-vertex") return
-    const fieldset = document.createElement("fieldset")
-    fieldset.className = "llm-field llm-auth-tabs"
-    const legend = document.createElement("legend")
-    legend.textContent = "Authentication"
-    const tabs = document.createElement("div")
-    tabs.setAttribute("role", "tablist")
-    tabs.setAttribute("aria-label", "Vertex authentication")
-    const panel = document.createElement("div")
-    panel.id = `llm-vertex-${config.authMode}-panel`
-    panel.setAttribute("role", "tabpanel")
-
-    const modes = ["api-key", "service-account"] as const
-    for (const [index, mode] of modes.entries()) {
-      const tab = document.createElement("button")
-      tab.type = "button"
-      tab.id = `llm-vertex-${mode}-tab`
-      tab.textContent = mode === "api-key" ? "API Key" : "Service Account"
-      tab.setAttribute("role", "tab")
-      tab.setAttribute("aria-selected", String(config.authMode === mode))
-      tab.setAttribute("aria-controls", `llm-vertex-${mode}-panel`)
-      tab.tabIndex = config.authMode === mode ? 0 : -1
-      tab.disabled = isLocked(value)
-      const activate = (): void => {
-        if (isLocked()) return
-        drafts.apiKey = ""
-        drafts.serviceAccountJson = ""
-        setConfig({ ...config, authMode: mode })
-        queueMicrotask(() => document.getElementById(`llm-vertex-${mode}-tab`)?.focus())
-      }
-      tab.addEventListener("click", activate)
-      tab.addEventListener("keydown", event => {
-        const keys = ["ArrowLeft", "ArrowRight", "Home", "End"]
-        if (!keys.includes(event.key) || isLocked()) return
-        event.preventDefault()
-        const nextIndex = event.key === "Home"
-          ? 0
-          : event.key === "End"
-            ? modes.length - 1
-            : (index + (event.key === "ArrowRight" ? 1 : -1) + modes.length) % modes.length
-        const nextMode = modes[nextIndex]
-        if (nextMode) {
-          drafts.apiKey = ""
-          drafts.serviceAccountJson = ""
-          setConfig({ ...config, authMode: nextMode })
-          queueMicrotask(() => document.getElementById(`llm-vertex-${nextMode}-tab`)?.focus())
-        }
-      })
-      tabs.append(tab)
+  const renderModelRows = (section: HTMLElement, value: SettingsState): void => {
+    const list = document.createElement("ul")
+    list.className = "llm-catalog-list"
+    if (value.modelSummaries.length === 0) {
+      const empty = document.createElement("li")
+      empty.className = "llm-catalog-empty"
+      empty.textContent = "No model configurations saved yet."
+      list.append(empty)
     }
-    panel.setAttribute("aria-labelledby", `llm-vertex-${config.authMode}-tab`)
-    if (config.authMode === "api-key") {
-      appendApiKey(panel)
+    for (const summary of value.modelSummaries) {
+      const row = document.createElement("li")
+      row.className = "llm-catalog-row"
+      const select = document.createElement("button")
+      select.type = "button"
+      select.className = "llm-catalog-select"
+      select.classList.toggle("llm-catalog-select-active", value.selectedModelConfigId === summary.id)
+      select.setAttribute("aria-current", String(value.selectedModelConfigId === summary.id))
+      const name = document.createElement("span")
+      name.className = "llm-catalog-name"
+      name.textContent = `${PROVIDER_LABELS[summary.provider]} · ${summary.name}`
+      const meta = document.createElement("span")
+      meta.className = "llm-catalog-meta"
+      meta.textContent = `model: ${summary.model}`
+      const mask = document.createElement("span")
+      mask.className = "llm-catalog-mask"
+      mask.textContent = reasoningSummary(summary.reasoning)
+      select.append(name, meta, mask)
+      select.disabled = isLocked(value)
+      select.onclick = () => controller.selectModelConfig(summary.id)
+      const remove = button("Delete", "llm-btn-danger")
+      remove.disabled = isLocked(value)
+      remove.onclick = () => {
+        if (window.confirm(`Delete saved model ${summary.name}?`)) void controller.deleteModel(summary.id, true)
+      }
+      row.append(select, remove)
+      list.append(row)
+    }
+    section.append(list)
+  }
+
+  const renderReasoning = (editor: HTMLElement, value: SettingsState, draft: SavedModelConfig): void => {
+    const reasoning = draft.reasoning
+    if (reasoning.provider === "google-ai-studio" || reasoning.provider === "google-vertex") {
+      editor.append(selectField("llm-model-reasoning", "Reasoning", reasoning.level ?? "null", [
+        ["null", "off"], ...REASONING_LEVELS.map(level => [level, level] as const),
+      ], next => updateModel({ reasoning: { ...reasoning, level: next === "null" ? null : next as ReasoningEffort } }), isLocked(value)))
+    } else if (reasoning.provider === "openai-compatible") {
+      editor.append(selectField("llm-model-reasoning", "Reasoning", reasoning.effort ?? "null", [
+        ["null", "off"], ...REASONING_LEVELS.map(level => [level, level] as const),
+      ], next => updateModel({ reasoning: { ...reasoning, effort: next === "null" ? null : next as ReasoningEffort } }), isLocked(value)))
     } else {
-      panel.append(textInput(
-        "llm-project-id",
-        "Project ID",
-        config.projectId,
-        projectId => setConfig({ ...config, projectId }),
-        value.fieldErrors["projectId"],
-        "text",
-        isLocked(value),
-      ))
-      panel.append(textInput(
-        "llm-location",
-        "Location",
-        config.location,
-        location => setConfig({ ...config, location }),
-        value.fieldErrors["location"],
-        "text",
-        isLocked(value),
-      ))
-      panel.append(textareaField(
-        "llm-service-account-json",
-        "Service Account JSON",
-        drafts.serviceAccountJson,
-        serviceAccountJson => {
-          if (isLocked()) return
-          drafts.serviceAccountJson = serviceAccountJson
-          controller.setSecretDraft({ serviceAccountJson })
-        },
-        "",
-        isLocked(value),
-      ))
-      panel.append(info("Leave blank to preserve the stored Service Account credential.", "llm-help"))
-    }
-    fieldset.append(legend, tabs, panel)
-    grid.append(fieldset)
-  }
-
-  const appendProviderFields = (grid: HTMLDivElement, value: SettingsState): void => {
-    const config = value.activeConfig
-    switch (config.provider) {
-      case "google-ai-studio":
-        grid.append(info("Endpoint: https://generativelanguage.googleapis.com", "llm-help"))
-        appendApiKey(grid)
-        return
-      case "google-vertex":
-        appendVertexFields(grid, value)
-        return
-      case "openai-compatible":
-        grid.append(textInput(
-          "llm-base-url",
-          "Base URL",
-          config.baseUrl,
-          baseUrl => setConfig({ ...config, baseUrl }),
-          value.fieldErrors["baseUrl"],
-          "text",
-          isLocked(value),
-        ))
-        grid.append(selectField(
-          "llm-authentication",
-          "Authentication",
-          config.authMode,
-          [["bearer", "Bearer"], ["none", "None"]],
-          authMode => setConfig({ ...config, authMode: authMode as "bearer" | "none" }),
-          "",
-          isLocked(value),
-        ))
-        appendApiKey(grid, config.authMode === "none")
-        grid.append(textareaField(
-          "llm-custom-headers",
-          "Custom headers JSON",
-          drafts.customHeadersJson,
-          customHeadersJson => {
-            if (isLocked()) return
-            drafts.customHeadersJson = customHeadersJson
-            controller.setSecretDraft({ customHeadersJson })
-          },
-          value.fieldErrors["customHeaderNames"],
-          isLocked(value),
-        ))
-        grid.append(info(
-          "Leave blank to preserve stored headers; enter {} to remove them. Reserved headers are rejected.",
-          "llm-help",
-        ))
-        if (config.customHeaderNames.length > 0) {
-          grid.append(info(`Stored header names: ${config.customHeaderNames.join(", ")}`, "llm-stored"))
-        }
-        if (value.runtimePlatform === "web" && isLocalNetworkUrl(config.baseUrl)) {
-          grid.append(info(
-            "Hosted web cannot reach this local endpoint. Use Risu desktop/Tauri or self-hosted Node.",
-            "llm-error",
-          ))
-        }
-        return
-      case "ollama":
-        grid.append(textInput(
-          "llm-base-url",
-          "Base URL",
-          config.baseUrl,
-          baseUrl => setConfig({ ...config, baseUrl }),
-          value.fieldErrors["baseUrl"],
-          "text",
-          isLocked(value),
-        ))
-        grid.append(selectField(
-          "llm-authentication",
-          "Authentication",
-          config.authMode,
-          [["none", "None"], ["bearer", "Bearer"]],
-          authMode => setConfig({ ...config, authMode: authMode as "none" | "bearer" }),
-          "",
-          isLocked(value),
-        ))
-        appendApiKey(grid, config.authMode === "none")
-        if (value.runtimePlatform === "web" && isLocalNetworkUrl(config.baseUrl)) {
-          grid.append(info(
-            "Hosted web cannot reach local Ollama. Use Risu desktop/Tauri or self-hosted Node.",
-            "llm-error",
-          ))
-        } else {
-          grid.append(info("This runtime can route this Ollama endpoint.", "llm-help"))
-        }
+      editor.append(selectField("llm-model-reasoning", "Reasoning", reasoning.enabled ? "enabled" : "disabled", [
+        ["disabled", "disabled"], ["enabled", "enabled"],
+      ], next => updateModel({ reasoning: { ...reasoning, enabled: next === "enabled" } }), isLocked(value)))
     }
   }
 
-  const appendActions = (form: HTMLFormElement, value: SettingsState): void => {
-    const actions = document.createElement("div")
-    actions.className = "llm-actions"
-    const button = (label: string): HTMLButtonElement => {
-      const element = document.createElement("button")
-      element.type = "button"
-      element.textContent = label
-      return element
+  const renderEditor = (section: HTMLElement, value: SettingsState): void => {
+    const draft = value.modelDraft
+    if (draft === null) return
+    const locked = isLocked(value)
+    const editor = document.createElement("form")
+    editor.className = "llm-editor"
+    editor.addEventListener("submit", event => { event.preventDefault(); if (!locked) void controller.saveModel() })
+    const editorTitle = document.createElement("h3")
+    editorTitle.textContent = value.modelSummaries.some(summary => summary.id === draft.id) ? "Edit model" : "Add model"
+    editor.append(editorTitle)
+    if (!value.modelSummaries.some(summary => summary.id === draft.id)) {
+      editor.append(selectField("llm-new-model-provider", "Provider", draft.provider, Object.entries(PROVIDER_LABELS), next => {
+        modelProvider = next as ProviderId
+        controller.createModel(modelProvider)
+      }, locked))
     }
-    const saveButton = button("Save")
-    saveButton.disabled = isLocked(value)
-    saveButton.onclick = () => { if (!isLocked()) void controller.save() }
-    const testButton = button("Test connection")
-    testButton.disabled = isLocked(value)
-    testButton.onclick = () => { if (!isLocked()) void controller.testConnection() }
-    const cancelButton = button("Cancel test")
-    cancelButton.hidden = value.operation !== "testing"
-    cancelButton.disabled = value.operation !== "testing"
-    cancelButton.onclick = () => { if (state?.operation === "testing") controller.cancelTest() }
-    const clearButton = button("Clear credential")
-    clearButton.disabled = isLocked(value)
-    clearButton.onclick = () => { if (!isLocked()) void controller.clearCredential() }
-    const resetButton = button("Reset provider")
-    resetButton.disabled = isLocked(value)
-    resetButton.onclick = () => {
-      if (isLocked()) return
-      if (window.confirm("Reset this provider and remove its stored credentials?")) {
-        clearDrafts()
-        void controller.resetActiveProvider()
+    editor.append(inputField("llm-model-name", "Name", draft.name, next => updateModel({ name: next }), "text", locked, value.fieldErrors["name"]))
+    editor.append(inputField("llm-model-id", "Model ID", draft.modelId, next => updateModel({ modelId: next }), "text", locked, value.fieldErrors["modelId"]))
+    if (draft.provider === "openai-compatible" || draft.provider === "ollama" || draft.provider === "deepseek") {
+      editor.append(inputField("llm-model-base-url", "Base URL", draft.baseUrl, next => updateModel({ baseUrl: next }), "text", locked || draft.provider === "deepseek", value.fieldErrors["baseUrl"]))
+      if (draft.provider === "openai-compatible" || draft.provider === "ollama") {
+        editor.append(selectField("llm-model-auth-mode", "Authentication", draft.authMode, [["bearer", "Bearer"], ["none", "None"]], next => updateModel({ authMode: next, keyId: null }), locked))
+      }
+      if (draft.provider !== "deepseek" && value.runtimePlatform === "web" && isLocalNetworkUrl(draft.baseUrl)) {
+        editor.append(info("Hosted web cannot reach this local endpoint. Use Risu desktop/Tauri or self-hosted Node.", "llm-error"))
       }
     }
-    const closeButton = button("Close")
-    closeButton.disabled = value.operation === "testing"
-    closeButton.onclick = () => { if (state?.operation !== "testing") void onClose() }
-    actions.append(saveButton, testButton, cancelButton, clearButton, resetButton, closeButton)
-    form.append(actions)
+    editor.append(selectField("llm-model-key", "Linked key", draft.keyId ?? "none", [
+      ["none", "(none)"], ...value.compatibleKeys.map(key => [key.id, key.name] as const),
+    ], next => {
+      if (next === "none" || isCredentialId(next)) void controller.linkModelKey(next === "none" ? null : next)
+    }, locked))
+    if (draft.provider === "google-vertex") editor.append(info("Project ID and location come from the linked Service Account key.", "llm-help"))
+    editor.append(inputField("llm-model-timeout", "Timeout (ms)", String(draft.timeoutMs), next => updateModel({ timeoutMs: Number(next) || 0 }), "number", locked))
+    for (const parameter of ["maxTokens", "temperature", "topP", "topK", "thinkingTokens"] as const) {
+      editor.append(inputField(`llm-model-${parameter}`, parameter, draft[parameter] === undefined ? "" : String(draft[parameter]), next => updateModel({ [parameter]: numberOrUndefined(next) }), "number", locked))
+    }
+    renderReasoning(editor, value, draft)
+    const flags = document.createElement("fieldset")
+    flags.className = "llm-flags"
+    const legend = document.createElement("legend")
+    legend.textContent = "Capability flags"
+    flags.append(legend)
+    for (const flag of MODEL_FLAGS) {
+      const checkboxRow = document.createElement("div")
+      checkboxRow.className = "llm-field-checkbox"
+      const label = document.createElement("label")
+      const checkbox = document.createElement("input")
+      checkbox.type = "checkbox"
+      checkbox.checked = draft.flags.includes(flag)
+      checkbox.disabled = locked
+      checkbox.onchange = () => updateModel({ flags: checkbox.checked ? [...draft.flags, flag] : draft.flags.filter(item => item !== flag) })
+      label.append(checkbox, flag)
+      checkboxRow.append(label)
+      flags.append(checkboxRow)
+    }
+    editor.append(flags)
+    editor.append(textareaField("llm-model-additional-json", "Additional JSON", draft.additionalJson, next => updateModel({ additionalJson: next }), locked))
+    const actions = document.createElement("div")
+    actions.className = "llm-editor-actions"
+    const save = button("Save model", "llm-btn-primary")
+    save.disabled = locked
+    save.onclick = () => { void controller.saveModel() }
+    const close = button("Close editor")
+    close.disabled = locked
+    close.onclick = () => controller.closeEditor()
+    actions.append(save, close)
+    editor.append(actions)
+    section.append(editor)
   }
 
   const render = (): void => {
     if (state === null) return
-    const focus = captureFocus(target)
-    const main = document.createElement("main")
-    main.className = "llm-settings-shell"
-    main.setAttribute("aria-labelledby", "llm-settings-title")
-
-    const card = document.createElement("section")
-    card.className = "llm-settings-card"
-
-    const title = document.createElement("h1")
-    title.id = "llm-settings-title"
-    title.textContent = "LLM Provider Settings"
-
-    const storageWarning = info(
-      "Settings and credentials use device-local storage that is shared between plugins and is not encrypted or an OS credential vault.",
-      "llm-storage-warning",
-    )
-
-    const form = document.createElement("form")
-    form.noValidate = true
-    form.addEventListener("submit", event => {
-      event.preventDefault()
-      if (!isLocked()) void controller.save()
-    })
-    const grid = document.createElement("div")
-    grid.className = "llm-field-grid"
-    appendCommonFields(grid, state)
-    appendProviderFields(grid, state)
-    form.append(grid)
-    appendActions(form, state)
-
-    const credential = info(
-      state.credentialState === "stored"
-        ? "Stored locally"
-        : state.credentialState === "stale"
-          ? "Stored credential does not match the current endpoint or auth settings."
-          : "No credential stored",
-      state.credentialState === "stored" ? "llm-stored" : "llm-help",
-    )
-
-    const status = document.createElement("p")
-    status.className = "llm-settings-status"
-    status.textContent = state.statusMessage
-    status.setAttribute("aria-live", "polite")
-    status.setAttribute("role", state.operation === "error" ? "alert" : "status")
-
-    card.append(title, storageWarning, form, credential, status)
-    main.append(card)
-    target.replaceChildren(main)
-    restoreFocus(target, focus)
+    const value = state
+    const root = document.createElement("div")
+    root.className = "llm-section"
+    root.append(info("Manage saved credentials in AI Services Keys. LLM settings store model configurations only.", "llm-storage-warning"))
+    const section = document.createElement("section")
+    section.className = "llm-catalog-section"
+    section.setAttribute("aria-labelledby", "llm-models-heading")
+    const header = document.createElement("header")
+    header.className = "llm-catalog-header"
+    const heading = document.createElement("h2")
+    heading.id = "llm-models-heading"
+    heading.textContent = "Model Configurations"
+    header.append(heading)
+    const add = button("Add model", "llm-btn-primary")
+    add.disabled = isLocked(value)
+    add.onclick = () => controller.createModel(modelProvider)
+    header.append(add)
+    section.append(header)
+    renderModelRows(section, value)
+    renderEditor(section, value)
+    root.append(section)
+    const actions = document.createElement("div")
+    actions.className = "llm-actions"
+    const test = button("Test connection")
+    test.disabled = isLocked(value) || value.selectedModelConfigId === null
+    test.onclick = () => { void controller.testConnection() }
+    const cancel = button("Cancel test")
+    cancel.hidden = value.operation !== "testing"
+    cancel.disabled = value.operation !== "testing"
+    cancel.onclick = () => controller.cancelTest()
+    actions.append(test, cancel)
+    root.append(actions, info(value.statusMessage, value.operation === "error" ? "llm-error" : "llm-settings-status"))
+    target.replaceChildren(root)
   }
 
   const unsubscribe = controller.subscribe(next => {
     state = next
-    if (
-      next.statusMessage === "Saved locally."
-      || next.statusMessage === "Credential removed."
-      || next.statusMessage === "Provider reset."
-    ) {
-      clearDrafts()
-    }
     render()
   })
   void controller.load()

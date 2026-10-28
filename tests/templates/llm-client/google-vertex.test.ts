@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { GoogleServiceAccountTokenProvider } from "../../../templates/features/llm-client/common/ts/src/features/llm-client/auth/google-service-account"
 import type { StoredCredential } from "../../../templates/features/llm-client/common/ts/src/features/llm-client/core/types"
+import { parseStoredSettings } from "../../../templates/features/llm-client/common/ts/src/features/llm-client/core/validation"
 import type {
   HttpRequest,
   HttpTransport,
@@ -10,7 +11,7 @@ import { GoogleVertexProvider } from "../../../templates/features/llm-client/com
 
 function harness() {
   const requests: HttpRequest[] = []
-  const transport: HttpTransport = {
+    const transport: HttpTransport = {
     async request(request) {
       requests.push(request)
       return {
@@ -19,7 +20,10 @@ function harness() {
         headers: new Headers({ "content-type": "application/json" }),
         bodyText: JSON.stringify({ candidates: [{ content: { parts: [{ text: "OK" }] } }] }),
       }
-    },
+      },
+      async stream() {
+        throw new TypeError("Streaming transport must not be called.")
+      },
   }
   const tokens = { getAccessToken: vi.fn().mockResolvedValue("access-a") }
   const provider = new GoogleVertexProvider(
@@ -27,15 +31,6 @@ function harness() {
     tokens as unknown as GoogleServiceAccountTokenProvider,
   )
   return { provider, requests, tokens }
-}
-
-const apiKeyCredential: StoredCredential = {
-  schemaVersion: 1,
-  slot: "google-vertex-api-key",
-  audience: "https://aiplatform.googleapis.com",
-  revision: "revision-api",
-  updatedAt: 1,
-  secret: { apiKey: "vertex-secret" },
 }
 
 const serviceAccountCredential: StoredCredential = {
@@ -51,46 +46,41 @@ const serviceAccountCredential: StoredCredential = {
   },
 }
 
-describe("GoogleVertexProvider", () => {
-  it("uses the Express Mode API-key endpoint without project or location", async () => {
-    const { provider, requests, tokens } = harness()
-    await provider.complete({
-      config: {
-        provider: "google-vertex",
-        authMode: "api-key",
-        projectId: "ignored-project",
-        location: "ignored-location",
-        model: "gemini-test",
-        timeoutMs: 60_000,
-      },
-      credential: apiKeyCredential,
-      request: { messages: [{ role: "user", content: "Reply OK" }] },
-      options: {},
-    })
-    const captured = requests[0]
-    expect(captured?.url).toBe(
-      "https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-test:generateContent",
-    )
-    expect(captured?.headers).toMatchObject({ "x-goog-api-key": "vertex-secret" })
-    expect(captured?.url).not.toContain("vertex-secret")
-    expect(captured?.url).not.toContain("ignored-project")
-    expect(tokens.getAccessToken).not.toHaveBeenCalled()
+function vertexModel(location: string, additionalJson = "") {
+  const settings = parseStoredSettings({
+    schemaVersion: 2,
+    savedKeys: [],
+    savedModelConfigs: [{
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      name: "Google Vertex",
+      provider: "google-vertex",
+      authMode: "service-account",
+      projectId: "project-a",
+      location,
+      modelId: "gemini-test",
+      keyId: null,
+      timeoutMs: 60_000,
+      reasoning: { provider: "google-vertex", level: null },
+      flags: [],
+        additionalJson,
+    }],
+    selectedModelConfigId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    defaultModelConfigId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   })
+  const model = settings.savedModelConfigs[0]
+  if (model === undefined) throw new TypeError("Expected Google Vertex model fixture.")
+  return model
+}
 
+describe("GoogleVertexProvider", () => {
   it("uses a regional project endpoint with a Service Account access token", async () => {
     const { provider, requests, tokens } = harness()
+    const model = vertexModel("us-central1")
     await provider.complete({
-      config: {
-        provider: "google-vertex",
-        authMode: "service-account",
-        projectId: "project-a",
-        location: "us-central1",
-        model: "gemini-test",
-        timeoutMs: 60_000,
-      },
+      model,
       credential: serviceAccountCredential,
       request: { messages: [{ role: "user", content: "Reply OK" }] },
-      options: {},
+      options: { modelConfigId: model.id },
     })
     expect(requests[0]?.url).toBe(
       "https://us-central1-aiplatform.googleapis.com/v1/projects/project-a/locations/us-central1/publishers/google/models/gemini-test:generateContent",
@@ -101,21 +91,31 @@ describe("GoogleVertexProvider", () => {
 
   it("uses the non-regional host for global Service Account calls", async () => {
     const { provider, requests } = harness()
+    const model = vertexModel("global")
+    const credential = { ...serviceAccountCredential, audience: "vertex:project-a:global" }
     await provider.complete({
-      config: {
-        provider: "google-vertex",
-        authMode: "service-account",
-        projectId: "project-a",
-        location: "global",
-        model: "gemini-test",
-        timeoutMs: 60_000,
-      },
-      credential: { ...serviceAccountCredential, audience: "vertex:project-a:global" },
+      model,
+      credential,
       request: { messages: [{ role: "user", content: "Reply OK" }] },
-      options: {},
+      options: { modelConfigId: model.id },
     })
     expect(requests[0]?.url).toBe(
       "https://aiplatform.googleapis.com/v1/projects/project-a/locations/global/publishers/google/models/gemini-test:generateContent",
     )
+  })
+
+  it("rejects protected additional JSON before a Service Account token or HTTP request", async () => {
+    const { provider, requests, tokens } = harness()
+    const model = { ...vertexModel("global"), additionalJson: "{\"generationConfig\":{}}" }
+
+    await expect(provider.complete({
+      model,
+      credential: serviceAccountCredential,
+      request: { messages: [{ role: "user", content: "Reply OK" }] },
+      options: { modelConfigId: model.id },
+    })).rejects.toMatchObject({ code: "CONFIG_INVALID" })
+
+    expect(tokens.getAccessToken).not.toHaveBeenCalled()
+    expect(requests).toHaveLength(0)
   })
 })

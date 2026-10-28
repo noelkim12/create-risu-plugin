@@ -1,48 +1,234 @@
-.llm-settings-shell {
-  box-sizing: border-box;
-  min-height: 100dvh;
-  padding: 24px;
-}
-
-.llm-settings-card {
-  width: min(840px, 100%);
-  margin: 0 auto;
-  box-sizing: border-box;
-  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
-  border-radius: 20px;
-  background: color-mix(in srgb, Canvas 94%, CanvasText 6%);
-  box-shadow: 0 18px 50px color-mix(in srgb, CanvasText 14%, transparent);
-  padding: 24px;
-}
-
-.llm-settings-card h1 {
-  margin: 0;
-  font-size: 1.35rem;
-  line-height: 1.2;
+/* Lamborghini design system — absolute black canvas, gold CTA, sharp corners, uppercase voice.
+   This panel renders flat inside the AI Services section content; the outer shell
+   owns the modal card, header, and close control. */
+.llm-section {
+  min-width: 0;
 }
 
 .llm-storage-warning {
-  margin: 12px 0 24px;
-  padding: 12px 14px;
-  border-inline-start: 4px solid #d97706;
-  background: color-mix(in srgb, #f59e0b 12%, Canvas);
+  margin: 8px 0 16px;
+  padding: 8px 12px;
+  border-inline-start: 4px solid #ffc000;
+  background: #181818;
+  color: #f5f5f5;
+  font-size: 0.78rem;
+  line-height: 1.4;
 }
 
-.llm-field-grid {
+/* Catalog section — the single model-only stack inside the section content. */
+.llm-catalog-section {
+  margin-block-start: 0;
+  padding-block-end: 16px;
+}
+
+.llm-catalog-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-block-end: 16px;
+}
+
+.llm-catalog-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+/* Catalog list — flat rows with a primary "select" affordance and a trailing destructive control. */
+.llm-catalog-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.llm-catalog-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.llm-catalog-select {
+  flex: 1 1 240px;
+  display: grid;
+  gap: 4px;
+  min-height: 64px;
+  border: 1px solid #313131;
+  border-radius: 0;
+  padding: 12px 14px;
+  background: #000000;
+  color: #ffffff;
+  text-align: start;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.llm-catalog-select:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.llm-catalog-select:focus-visible {
+  outline: 2px solid #29abe2;
+  outline-offset: 2px;
+}
+
+.llm-catalog-select-active {
+  border-color: #ffc000;
+  background: #18120a;
+}
+
+.llm-catalog-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.llm-catalog-name {
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+}
+
+.llm-catalog-meta {
+  font-size: 0.78rem;
+  color: #b5b5b5;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.llm-catalog-mask {
+  font-size: 0.82rem;
+  color: #ffce3e;
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.llm-catalog-empty {
+  border: 1px dashed #313131;
+  padding: 16px;
+  color: #7d7d7d;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+
+/* Editor panel — a card-within-card for the currently selected key or model. */
+.llm-editor {
+  margin-block-start: 12px;
+  padding: 16px;
+  border: 1px solid #313131;
+  background: #181818;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px 16px;
+}
+
+.llm-editor h3,
+.llm-editor > .llm-help,
+.llm-editor > .llm-error,
+.llm-editor > .llm-editor-actions,
+.llm-editor > .llm-flags,
+.llm-editor > .llm-field-wide {
+  grid-column: 1 / -1;
+}
+
+.llm-editor h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.llm-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Single-checkbox rows inside the capability flag fieldset. */
+.llm-field-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  grid-template-columns: none;
+}
+
+.llm-field-checkbox input {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: #000000;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.llm-field-checkbox input:checked {
+  background: #ffc000;
+  border-color: #ffc000;
+}
+
+.llm-field-checkbox input:checked::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  background: #000000;
+  clip-path: polygon(14% 50%, 0 60%, 38% 100%, 100% 24%, 90% 12%, 38% 78%);
+}
+
+.llm-field-checkbox input:focus-visible {
+  outline: 2px solid #29abe2;
+  outline-offset: 2px;
+}
+
+.llm-field-checkbox label {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 0.85rem;
+  color: #f5f5f5;
+}
+
+.llm-flags {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  border: 1px solid #313131;
+  padding: 16px;
+  background: #000000;
+}
+
+.llm-flags legend {
+  font-weight: 400;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffffff;
+  padding-inline: 6px;
 }
 
 .llm-field {
   display: grid;
   gap: 6px;
   min-width: 0;
+  align-content: start;
 }
 
 .llm-field label,
 .llm-field legend {
-  font-weight: 650;
+  font-weight: 400;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffffff;
 }
 
 .llm-field input,
@@ -50,122 +236,168 @@
 .llm-field textarea {
   box-sizing: border-box;
   width: 100%;
-  min-height: 44px;
-  border: 1px solid color-mix(in srgb, CanvasText 28%, transparent);
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: Canvas;
-  color: CanvasText;
+  min-height: 40px;
+  border: 1px solid #313131;
+  border-radius: 0;
+  padding: 9px 12px;
+  background: #000000;
+  color: #ffffff;
   font: inherit;
+  transition: border-color 0.15s ease;
+}
+
+.llm-field input:focus-visible,
+.llm-field select:focus-visible,
+.llm-field textarea:focus-visible {
+  outline: none;
+  border-color: #ffc000;
+}
+
+.llm-field input:disabled,
+.llm-field select:disabled,
+.llm-field textarea:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .llm-field textarea {
   resize: vertical;
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.88rem;
 }
 
 .llm-field .llm-error {
-  min-height: 1lh;
   margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
 }
 
-.llm-auth-tabs {
-  grid-column: 1 / -1;
-  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
-  border-radius: 14px;
-  padding: 16px;
+.llm-field .llm-error:empty {
+  display: none;
 }
 
-.llm-auth-tabs [role="tablist"] {
-  display: flex;
-  gap: 8px;
-}
-
-.llm-auth-tabs [role="tab"] {
-  min-height: 44px;
-  border: 1px solid color-mix(in srgb, CanvasText 22%, transparent);
-  border-radius: 999px;
-  padding: 8px 14px;
-  background: transparent;
-  color: CanvasText;
-  font: inherit;
-}
-
-.llm-auth-tabs [role="tab"][aria-selected="true"] {
-  background: CanvasText;
-  color: Canvas;
-}
-
-.llm-auth-tabs [role="tabpanel"] {
-  display: grid;
-  gap: 14px;
-  margin-top: 16px;
-}
-
+/* Action bar — connection workflow only; panel close lives in the top-right header. */
 .llm-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 20px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 28px;
 }
 
-.llm-actions button {
-  min-height: 44px;
-  border: 1px solid color-mix(in srgb, CanvasText 22%, transparent);
-  border-radius: 999px;
-  padding: 9px 16px;
-  background: Canvas;
-  color: CanvasText;
+/* Button chrome — one token set for every action bar the model-only panel renders. */
+.llm-actions button,
+.llm-editor-actions button,
+.llm-catalog-header > button,
+.llm-catalog-row > .llm-btn-danger {
+  position: relative;
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 0;
+  padding: 7px 16px;
+  background: transparent;
+  color: #ffffff;
   cursor: pointer;
   font: inherit;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.llm-actions button:first-child {
-  border-color: CanvasText;
-  background: CanvasText;
-  color: Canvas;
+.llm-actions button:hover:not(:disabled),
+.llm-editor-actions button:hover:not(:disabled),
+.llm-catalog-header > button:hover:not(:disabled),
+.llm-catalog-row > .llm-btn-danger:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #ffffff;
+  z-index: 1;
 }
 
-.llm-actions button:disabled {
+/* Primary CTA — Lamborghini Gold, the only chromatic button. */
+.llm-catalog-header > .llm-btn-primary,
+.llm-editor-actions > .llm-btn-primary {
+  border-color: #ffc000;
+  background: #ffc000;
+  color: #000000;
+  font-weight: 700;
+}
+
+.llm-catalog-header > .llm-btn-primary:hover:not(:disabled),
+.llm-editor-actions > .llm-btn-primary:hover:not(:disabled) {
+  background: #917300;
+  border-color: #917300;
+  color: #ffffff;
+}
+
+/* Destructive — red accent on hover to signal data loss. */
+.llm-catalog-row > .llm-btn-danger:hover:not(:disabled) {
+  border-color: #ff5a5a;
+  color: #ff5a5a;
+  background: rgba(255, 90, 90, 0.08);
+}
+
+.llm-actions button:disabled,
+.llm-editor-actions button:disabled,
+.llm-catalog-header > button:disabled,
+.llm-catalog-row > .llm-btn-danger:disabled {
   cursor: wait;
-  opacity: 0.55;
+  opacity: 0.4;
 }
 
 .llm-actions button:focus-visible,
-.llm-field :focus-visible {
-  outline: 3px solid Highlight;
+.llm-editor-actions button:focus-visible,
+.llm-catalog-header > button:focus-visible,
+.llm-catalog-row > .llm-btn-danger:focus-visible {
+  outline: 2px solid #29abe2;
   outline-offset: 2px;
+  z-index: 2;
 }
 
 .llm-help,
 .llm-settings-status,
-.llm-stored,
 .llm-error {
   overflow-wrap: anywhere;
+  margin: 0;
 }
 
 .llm-help {
-  color: color-mix(in srgb, CanvasText 70%, transparent);
+  color: #7d7d7d;
+  font-size: 0.88rem;
+  line-height: 1.5;
 }
 
 .llm-error {
-  color: #dc2626;
+  color: #ff5a5a;
 }
 
-.llm-stored {
-  color: #15803d;
+.llm-settings-status {
+  margin-top: 12px;
+  color: #f5f5f5;
+  font-size: 0.88rem;
+  letter-spacing: 0.02em;
 }
 
 @media (max-width: 680px) {
-  .llm-settings-shell {
-    padding: 12px;
+  .llm-catalog-header {
+    align-items: stretch;
   }
 
-  .llm-settings-card {
-    border-radius: 14px;
-    padding: 18px;
+  .llm-catalog-row {
+    flex-direction: column;
   }
 
-  .llm-field-grid {
+  .llm-catalog-select {
+    flex-basis: 100%;
+  }
+
+  .llm-flags {
     grid-template-columns: 1fr;
+  }
+
+  .llm-editor {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px;
   }
 }

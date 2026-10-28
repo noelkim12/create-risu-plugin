@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Plugin UI</title></head>
+<body>
+<script type="module">
+  const host = window.parent.__risuMock;
+  if (!host) throw new Error("Open /dev/ to start the mock host.");
+  window.risuai = host.api;
+  window.Risuai = host.api;
+  try {
+    await import("../src/main.ts");
+    host.ready();
+  } catch (error) {
+    host.error(error);
+  }
+</script>
+</body>
+</html>

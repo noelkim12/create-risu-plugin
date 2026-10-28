@@ -1,0 +1,257 @@
+/* Contextual embedding section using the shared AI Services shell tokens. */
+.ai-contextual {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ai-contextual h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.ai-contextual-intro {
+  margin: 8px 0 0;
+  color: #b5b5b5;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.ai-contextual-note {
+  margin: 16px 0;
+  padding: 8px 12px;
+  border-inline-start: 4px solid #ffc000;
+  background: #181818;
+  color: #f5f5f5;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.ai-contextual-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.ai-contextual-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  border: 1px solid #313131;
+  background: #000000;
+  padding: 12px 14px;
+}
+
+.ai-contextual-meta {
+  flex: 1 1 240px;
+  display: grid;
+  gap: 4px;
+}
+
+.ai-contextual-name {
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+}
+
+.ai-contextual-detail {
+  font-size: 0.78rem;
+  color: #b5b5b5;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ai-contextual-model {
+  font-size: 0.82rem;
+  color: #ffce3e;
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.ai-contextual-empty {
+  border: 1px dashed #313131;
+  padding: 16px;
+  color: #7d7d7d;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+
+.ai-contextual-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-contextual-row-actions button,
+.ai-contextual-actions button {
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 0;
+  padding: 7px 16px;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.ai-contextual-row-actions button:hover:not(:disabled),
+.ai-contextual-actions button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #ffffff;
+}
+
+.ai-contextual-actions button.ai-btn-primary {
+  border-color: #ffc000;
+  background: #ffc000;
+  color: #000000;
+  font-weight: 700;
+}
+
+.ai-contextual-actions button.ai-btn-primary:hover:not(:disabled) {
+  background: #917300;
+  border-color: #917300;
+  color: #ffffff;
+}
+
+.ai-contextual-row-actions button.ai-btn-danger:hover:not(:disabled) {
+  border-color: #ff5a5a;
+  color: #ff5a5a;
+  background: rgba(255, 90, 90, 0.08);
+}
+
+.ai-contextual-row-actions button:disabled,
+.ai-contextual-actions button:disabled {
+  cursor: wait;
+  opacity: 0.4;
+}
+
+.ai-contextual-row-actions button:focus-visible,
+.ai-contextual-actions button:focus-visible {
+  outline: 2px solid #29abe2;
+  outline-offset: 2px;
+}
+
+.ai-contextual-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  padding: 16px;
+  border: 1px solid #313131;
+  background: #181818;
+}
+
+.ai-contextual-editor h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.ai-contextual-field {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-width: 0;
+}
+
+.ai-contextual-field label {
+  font-weight: 400;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.ai-contextual-field input,
+.ai-contextual-field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #313131;
+  border-radius: 0;
+  padding: 8px 10px;
+  background: #000000;
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.ai-contextual-field input:focus-visible,
+.ai-contextual-field select:focus-visible {
+  outline: 2px solid #29abe2;
+  outline-offset: 1px;
+}
+
+.ai-contextual-field input:disabled,
+.ai-contextual-field select:disabled {
+  cursor: wait;
+  opacity: 0.4;
+}
+
+.ai-contextual-disclosure {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  padding: 12px 16px;
+  border: 1px solid #313131;
+  background: #000000;
+}
+
+.ai-contextual-disclosure summary {
+  grid-column: 1 / -1;
+  cursor: pointer;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.ai-contextual-disclosure summary:focus-visible {
+  outline: 2px solid #29abe2;
+  outline-offset: 2px;
+}
+
+.ai-contextual-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-contextual-status {
+  margin: 12px 0 0;
+  color: #f5f5f5;
+  font-size: 0.88rem;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 680px) {
+  .ai-contextual-editor {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .ai-contextual-disclosure {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai-contextual-row {
+    flex-direction: column;
+  }
+}

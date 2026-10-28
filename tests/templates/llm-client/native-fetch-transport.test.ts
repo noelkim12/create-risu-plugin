@@ -138,4 +138,33 @@ describe("NativeFetchTransport", () => {
       networkRoute: "auto",
     })).rejects.toMatchObject<LlmError>({ code: "TIMEOUT" })
   })
+
+  it("reads stream chunks incrementally and cancels the active reader on caller abort", async () => {
+    const encoder = new TextEncoder()
+    let cancelled = false
+    const nativeFetch = vi.fn().mockResolvedValue(new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode("first"))
+      },
+      cancel() {
+        cancelled = true
+      },
+    }), { status: 200 }))
+    const transport = new NativeFetchTransport({ nativeFetch })
+    const caller = new AbortController()
+    const response = await transport.stream({
+      url: "https://api.example/v1",
+      method: "POST",
+      headers: {},
+      signal: caller.signal,
+      timeoutMs: 60_000,
+      networkRoute: "auto",
+    })
+    const iterator = response.body[Symbol.asyncIterator]()
+
+    await expect(iterator.next()).resolves.toMatchObject({ done: false, value: encoder.encode("first") })
+    caller.abort()
+    await expect(iterator.next()).rejects.toMatchObject<LlmError>({ code: "ABORTED" })
+    expect(cancelled).toBe(true)
+  })
 })

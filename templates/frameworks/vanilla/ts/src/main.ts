@@ -34,17 +34,6 @@ const openPanel = async (): Promise<void> => {
   })
 }
 
-await risuai.registerButton(
-  {
-    name: PLUGIN_DISPLAY_NAME,
-    icon: '<span aria-hidden="true">R</span>',
-    iconType: "html",
-    location: "action",
-    id: `${PLUGIN_NAME}-action`,
-  },
-  () => void openPanel(),
-)
-
 await risuai.registerSetting(
   `${PLUGIN_DISPLAY_NAME} Settings`,
   openPanel,

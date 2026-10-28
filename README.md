@@ -10,6 +10,7 @@ Create a TypeScript Risuai API v3 plugin scaffold for vanilla DOM or Svelte. The
 - Scoped storage helpers built on `pluginStorage`.
 - Read-only current character and chat context helpers.
 - Vite watch and build scripts for manual Risuai import and file-based hot reload.
+- Built-in `npm run mock` browser preview for both frameworks, with sample chat and persistent mock storage.
 
 ## Quick Start
 
@@ -42,17 +43,17 @@ The name must be kebab-case (`my-risu-plugin`). On success the last stdout line 
 
 After choosing Vanilla or Svelte, the CLI shows an optional-feature checkbox. Features are OFF by default; press Space to toggle **LLM client — call external LLM APIs directly**, then Enter to continue.
 
-When enabled, the generated project contains `src/features/llm-client/`, a framework-specific settings screen, `src/features/generated.ts`, and `docs/llm-client.md`. The feature calls Google AI Studio, Google Vertex, OpenAI-compatible APIs, and Ollama directly; it does not register a Risu model provider. Projects generated with the checkbox clear contain no LLM-client source.
+When enabled, the generated project contains `src/features/llm-client/`, shared AI Services settings, `src/features/generated.ts`, and `docs/llm-client.md`. **AI Services** owns the **Keys** section for every selected credential consumer. The **LLM** section manages model configurations only. Each direct call explicitly selects its saved model with `modelConfigId`. The feature calls Google AI Studio, Google Vertex, OpenAI-compatible APIs, Ollama, and dedicated official-endpoint DeepSeek directly through `risuai.nativeFetch`; it does not register a Risu model provider. Projects generated with the checkbox clear contain no LLM-client source.
 
 ## Risuai v3 Development Flow
 
 1. Run `npm run dev` to start Vite watch mode, or run `npm run build` for a one-time build.
 2. Open Risuai v3 plugin import or file-based hot reload.
 3. Select the built `dist/<plugin-name>.js` file.
-4. In Risuai, click the generated action button. If the button location is hidden by your layout, open the generated settings entry as a fallback.
+4. In Risuai, open the generated settings entry.
 5. Confirm the iframe-local panel opens, the open count updates, and the current character or chat context appears when available.
 
-The generated project doesn't run a separate development server. Risuai reads the built JavaScript file you select.
+`npm run dev` watches the built JavaScript file for Risuai. To preview the plugin without Risuai, run `npm run mock`: it opens a local mock host at `/dev/`, with settings buttons that launch the actual plugin UI in an iframe. Edit `dev/fixtures.ts` to customize sample data. The generated `docs/mock.md` documents the supported API subset; real network calls and unsupported host APIs fail explicitly. Mock files are excluded from the production bundle.
 
 ## Generated Project Shape
 
@@ -87,11 +88,11 @@ npm run typecheck # check TypeScript
 
 ### Vanilla
 
-The vanilla template registers a visible action button with `registerButton`, keeps a settings entry as a fallback, opens the Risuai plugin iframe, and renders a small DOM panel into the iframe document.
+The vanilla template registers a settings entry, opens the Risuai plugin iframe, and renders a small DOM panel into the iframe document.
 
 ### Svelte
 
-The Svelte template registers the same visible action button and settings fallback, mounts `App.svelte` after either entry opens, then unmounts it when Risuai unloads the plugin.
+The Svelte template registers the settings entry, mounts `App.svelte` after it opens, then unmounts it when Risuai unloads the plugin.
 
 ## Optional Update URL
 

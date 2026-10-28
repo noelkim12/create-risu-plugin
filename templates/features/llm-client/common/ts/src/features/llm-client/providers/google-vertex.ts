@@ -1,16 +1,22 @@
 import { GoogleServiceAccountTokenProvider } from "../auth/google-service-account"
-import type { GoogleVertexConfig } from "../core/types"
+import { LlmError } from "../core/errors"
+import type { GoogleVertexModelConfig } from "../core/types"
 import type { HttpTransport } from "../network/native-fetch-transport"
-import { fromGeminiResponse, toGeminiRequest } from "./gemini-protocol"
-import { parseJsonResponse, requireSecret, type LlmProvider, type ProviderExecution } from "./provider"
+import { fromGeminiResponse, fromGeminiStream, toGeminiRequest } from "./gemini-protocol"
+import {
+  assertStreamResponse,
+  parseJsonResponse,
+  type LlmProvider,
+  type ProviderExecution,
+} from "./provider"
 
-function serviceAccountUrl(config: GoogleVertexConfig): string {
-  const location = config.location.trim()
-  const projectId = config.projectId.trim()
+function serviceAccountUrl(model: GoogleVertexModelConfig): string {
+  const location = model.location.trim()
+  const projectId = model.projectId.trim()
   const origin = location === "global"
     ? "https://aiplatform.googleapis.com"
     : `https://${location}-aiplatform.googleapis.com`
-  return `${origin}/v1/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(config.model)}:generateContent`
+  return `${origin}/v1/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(model.modelId)}:generateContent`
 }
 
 export class GoogleVertexProvider implements LlmProvider {
@@ -20,37 +26,54 @@ export class GoogleVertexProvider implements LlmProvider {
   ) {}
 
   async complete(execution: ProviderExecution) {
-    const config = execution.config as GoogleVertexConfig
-    const timeoutMs = execution.options.timeoutMs ?? config.timeoutMs
-    const headers: Record<string, string> = { "content-type": "application/json" }
-    let url: string
-
-    if (config.authMode === "api-key") {
-      const apiKey = requireSecret(execution.credential, "apiKey", config.provider)
-      headers["x-goog-api-key"] = apiKey
-      url = `https://aiplatform.googleapis.com/v1/publishers/google/models/${encodeURIComponent(config.model)}:generateContent`
-    } else {
-      if (!execution.credential) {
-        requireSecret(null, "Service Account JSON", config.provider)
-      }
-      const token = await this.tokens.getAccessToken(
-        execution.credential!,
-        execution.options.signal,
-        timeoutMs,
-      )
-      headers["Authorization"] = `Bearer ${token}`
-      url = serviceAccountUrl(config)
+    if (execution.model.provider !== "google-vertex") {
+      throw new LlmError("CONFIG_INVALID", "Google Vertex received an incompatible model configuration.")
+    }
+    const model = execution.model
+    const body = toGeminiRequest(model, execution.request)
+    const timeoutMs = execution.options.timeoutMs ?? model.timeoutMs
+    if (execution.credential === null) throw new LlmError("CREDENTIAL_MISSING", "Service Account credential is missing.", model.provider)
+    const token = await this.tokens.getAccessToken(execution.credential, execution.options.signal, timeoutMs)
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      Authorization: `Bearer ${token}`,
     }
 
     const response = await this.transport.request({
-      url,
+      url: serviceAccountUrl(model),
       method: "POST",
       headers,
-      body: JSON.stringify(toGeminiRequest(execution.request)),
+      body: JSON.stringify(body),
       ...(execution.options.signal === undefined ? {} : { signal: execution.options.signal }),
       timeoutMs,
       networkRoute: "auto",
     })
-    return fromGeminiResponse(config.provider, config.model, parseJsonResponse(response, config.provider))
+    return fromGeminiResponse(model, parseJsonResponse(response, model.provider))
+  }
+
+  async *stream(execution: ProviderExecution) {
+    if (execution.model.provider !== "google-vertex") {
+      throw new LlmError("CONFIG_INVALID", "Google Vertex received an incompatible model configuration.")
+    }
+    const model = execution.model
+    const timeoutMs = execution.options.timeoutMs ?? model.timeoutMs
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      Accept: "text/event-stream",
+    }
+    if (execution.credential === null) throw new LlmError("CREDENTIAL_MISSING", "Service Account credential is missing.", model.provider)
+    const token = await this.tokens.getAccessToken(execution.credential, execution.options.signal, timeoutMs)
+    headers["Authorization"] = `Bearer ${token}`
+    const response = await this.transport.stream({
+      url: `${serviceAccountUrl(model).replace(":generateContent", ":streamGenerateContent")}?alt=sse`,
+      method: "POST",
+      headers,
+      body: JSON.stringify(toGeminiRequest(model, execution.request)),
+      ...(execution.options.signal === undefined ? {} : { signal: execution.options.signal }),
+      timeoutMs,
+      networkRoute: "auto",
+    })
+    assertStreamResponse(response, model.provider)
+    yield* fromGeminiStream(model, response.body, execution.options.signal)
   }
 }

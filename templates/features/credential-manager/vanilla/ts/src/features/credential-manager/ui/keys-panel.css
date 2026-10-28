@@ -1,0 +1,361 @@
+/* Keys section — Lamborghini design system tokens shared with the AI Services shell:
+   absolute black canvas, gold CTA, sharp corners, uppercase voice. Scoped with the
+   ai-keys- prefix because every feature section shares one iframe document. */
+.ai-keys {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ai-keys h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.ai-keys-intro {
+  margin: 8px 0 0;
+  color: #b5b5b5;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.ai-keys-warning {
+  margin: 16px 0;
+  padding: 8px 12px;
+  border-inline-start: 4px solid #ffc000;
+  background: #181818;
+  color: #f5f5f5;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.ai-keys-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.ai-keys-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  border: 1px solid #313131;
+  background: #000000;
+  padding: 12px 14px;
+}
+
+.ai-keys-meta {
+  flex: 1 1 240px;
+  display: grid;
+  gap: 4px;
+}
+
+.ai-keys-name {
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+}
+
+.ai-keys-detail {
+  font-size: 0.78rem;
+  color: #b5b5b5;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ai-keys-mask {
+  font-size: 0.82rem;
+  color: #ffce3e;
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.ai-keys-audience {
+  font-size: 0.78rem;
+  color: #7d7d7d;
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.ai-keys-empty {
+  border: 1px dashed #313131;
+  padding: 16px;
+  color: #7d7d7d;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+
+.ai-keys-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-keys-confirm {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border-inline-start: 4px solid #ff5a5a;
+  padding: 8px 12px;
+  background: rgba(255, 90, 90, 0.06);
+}
+
+.ai-keys-confirm span {
+  flex: 1 1 240px;
+  color: #f5f5f5;
+  font-size: 0.82rem;
+}
+
+.ai-keys-row-actions button,
+.ai-keys-confirm button,
+.ai-keys-actions button,
+.ai-keys > .ai-keys-primary {
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 0;
+  padding: 7px 16px;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.ai-keys-row-actions button:hover:not(:disabled),
+.ai-keys-confirm button:hover:not(:disabled),
+.ai-keys-actions button:hover:not(:disabled),
+.ai-keys > .ai-keys-primary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #ffffff;
+}
+
+.ai-keys-actions .ai-keys-primary,
+.ai-keys > .ai-keys-primary {
+  border-color: #ffc000;
+  background: #ffc000;
+  color: #000000;
+  font-weight: 700;
+}
+
+.ai-keys-actions .ai-keys-primary:hover:not(:disabled),
+.ai-keys > .ai-keys-primary:hover:not(:disabled) {
+  background: #917300;
+  border-color: #917300;
+  color: #ffffff;
+}
+
+.ai-keys-row-actions .ai-keys-danger:hover:not(:disabled),
+.ai-keys-confirm .ai-keys-danger:hover:not(:disabled),
+.ai-keys-actions .ai-keys-danger:hover:not(:disabled) {
+  border-color: #ff5a5a;
+  color: #ff5a5a;
+  background: rgba(255, 90, 90, 0.08);
+}
+
+.ai-keys-row-actions button:disabled,
+.ai-keys-confirm button:disabled,
+.ai-keys-actions button:disabled,
+.ai-keys > .ai-keys-primary:disabled {
+  cursor: wait;
+  opacity: 0.4;
+}
+
+.ai-keys-row-actions button:focus-visible,
+.ai-keys-confirm button:focus-visible,
+.ai-keys-actions button:focus-visible,
+.ai-keys > .ai-keys-primary:focus-visible {
+  outline: 2px solid #29abe2;
+  outline-offset: 2px;
+}
+
+.ai-keys-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  padding: 16px;
+  border: 1px solid #313131;
+  background: #181818;
+}
+
+.ai-keys-editor h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.ai-keys-editor > .ai-keys-field-wide,
+.ai-keys-editor > .ai-keys-btn-group,
+.ai-keys-editor > .ai-keys-actions,
+.ai-keys-editor > .ai-keys-stored,
+.ai-keys-editor > .ai-keys-error,
+.ai-keys-editor > .ai-keys-help {
+  grid-column: 1 / -1;
+}
+
+.ai-keys-field {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-width: 0;
+}
+
+.ai-keys-field label {
+  font-weight: 400;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.ai-keys-field input,
+.ai-keys-field select,
+.ai-keys-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #313131;
+  border-radius: 0;
+  padding: 8px 10px;
+  background: #000000;
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.ai-keys-field textarea {
+  resize: vertical;
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.ai-keys-field input:focus-visible,
+.ai-keys-field select:focus-visible,
+.ai-keys-field textarea:focus-visible {
+  outline: none;
+  border-color: #ffc000;
+}
+
+.ai-keys-field input:disabled,
+.ai-keys-field select:disabled,
+.ai-keys-field textarea:disabled {
+  cursor: wait;
+  opacity: 0.4;
+}
+
+.ai-keys-btn-group {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.ai-keys-btn-group button {
+  position: relative;
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 0;
+  padding: 7px 16px;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ai-keys-btn-group button + button {
+  margin-inline-start: -1px;
+}
+
+.ai-keys-btn-group button:disabled {
+  cursor: wait;
+  opacity: 0.4;
+}
+
+.ai-keys-btn-group button:focus-visible {
+  outline: 2px solid #29abe2;
+  outline-offset: 2px;
+  z-index: 2;
+}
+
+.ai-keys-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-keys-help,
+.ai-keys-stored,
+.ai-keys-error {
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+.ai-keys-help {
+  color: #7d7d7d;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.ai-keys-error {
+  color: #ff5a5a;
+}
+
+.ai-keys-stored {
+  color: #ffce3e;
+  font-size: 0.85rem;
+}
+
+.ai-keys-revealed {
+  max-height: 18rem;
+  overflow: auto;
+  border: 1px solid #313131;
+  padding: 12px;
+  background: #000000;
+  font: 0.82rem/1.5 "SFMono-Regular", Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+.ai-keys-status {
+  margin: 12px 0 0;
+  color: #f5f5f5;
+  font-size: 0.88rem;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+
+.ai-keys-status.ai-keys-error {
+  color: #ff5a5a;
+}
+
+.ai-keys-loading {
+  margin: 0;
+  color: #7d7d7d;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 680px) {
+  .ai-keys-editor {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .ai-keys-row {
+    flex-direction: column;
+  }
+}

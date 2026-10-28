@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>모의 RisuAI</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar" aria-label="사이드바">
+    <div class="sidebar-heading">사이드바<button id="sidebar-close" class="mobile-only" type="button" aria-label="사이드바 닫기">×</button></div>
+    <p class="hint">플러그인 설정</p>
+    <nav id="settings" aria-label="플러그인 설정"></nav>
+    <details><summary>메뉴</summary><nav id="hamburger-buttons" aria-label="메뉴 버튼"></nav></details>
+    <details class="dev-controls"><summary>개발 도구</summary>
+      <button id="reload" type="button">플러그인 새로고침</button>
+      <button id="reset" type="button">플러그인 저장소 초기화</button>
+      <p id="status" role="status">플러그인 불러오는 중…</p>
+    </details>
+    <p class="hint">마지막 요청</p>
+    <pre id="request">(없음)</pre>
+  </aside>
+  <main class="chat" aria-label="모의 채팅">
+    <div class="messages" id="messages" aria-live="polite"></div>
+    <div class="actions" id="actions">
+      <button class="mobile-only" id="sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="false">메뉴</button>
+      <nav id="action-buttons" aria-label="액션 버튼"></nav>
+      <nav id="chat-buttons" aria-label="채팅 버튼"></nav>
+      <button id="modal-open" type="button">기본 Alert 열기</button>
+      <button id="chat-reset" type="button">채팅 초기화</button>
+    </div>
+    <form id="composer" class="input-row">
+      <textarea id="message" class="text-input-area" rows="1" placeholder="메시지 입력" aria-label="메시지 입력"></textarea>
+      <button class="send" type="submit" aria-label="전송">➤</button>
+    </form>
+  </main>
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="기본 Alert" hidden>
+    <div>Risuai의 기본 Alert메세지입니다 <button id="modal-close" type="button">닫기</button></div>
+  </div>
+  <iframe id="plugin-frame" title="플러그인 UI" hidden></iframe>
+  <script type="module" src="./host.ts"></script>
+</body>
+</html>

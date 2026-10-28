@@ -45,7 +45,7 @@ templates/
 4. `TemplateComposer` copies `templates/frameworks/<framework>/ts` and the matching Vite config to `vite.config.ts`.
 5. `FileProcessor` renames `gitignore.template` to `.gitignore`.
 6. `PackageJsonUpdater` applies generated package metadata and dependency fragments.
-7. `ConfigFileUpdater` replaces placeholders in README and `src/constants/plugin.ts`.
+7. `ConfigFileUpdater` replaces placeholders in README and `src/constants/plugin.ts`, then appends the canonical AI Services Keys fragment for any credential consumer and the model-only consumer fragments.
 8. `DependencyManager` runs install in the generated project.
 
 ## Generated project contract
@@ -108,4 +108,4 @@ If one of those topics is needed for historical context, keep it outside the def
 
 `lib/features/featureCatalog.js` is the only registry for feature IDs, prompt labels, template directories, and registration exports. `FeatureComposer` copies `templates/features/<id>/common/ts` first and then `templates/features/<id>/<framework>/ts`. Both layers are copied with overwrite disabled, so a feature cannot silently replace a base-template file or another feature's file.
 
-The composer always regenerates `src/features/generated.ts`. With no selected features it exports a no-op `registerFeatures`; with `llm-client` selected it imports and awaits `registerLlmClientFeature` exactly once. Changes to a feature must pass the Vanilla OFF, Vanilla ON, Svelte OFF, and Svelte ON generation matrix.
+The composer always regenerates `src/features/generated.ts`. With no selected features it exports a no-op `registerFeatures`; internal dependencies remain hidden from prompts and public feature IDs. Any selected credential consumer composes the shared AI Services Keys README fragment. Changes to a feature must pass representative no-feature and all-consumer Vanilla/Svelte generation checks.

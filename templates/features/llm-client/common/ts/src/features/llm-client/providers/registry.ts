@@ -1,10 +1,10 @@
-import type { ProviderConfig } from "../core/types"
+import type { SavedModelConfig } from "../core/types"
 import type { LlmProvider } from "./provider"
 
 export class ProviderRegistry {
-  constructor(private readonly providers: Readonly<Record<ProviderConfig["provider"], LlmProvider>>) {}
+  constructor(private readonly providers: Readonly<Record<SavedModelConfig["provider"], LlmProvider>>) {}
 
-  for(config: ProviderConfig): LlmProvider {
-    return this.providers[config.provider]
+  for(model: SavedModelConfig): LlmProvider {
+    return this.providers[model.provider]
   }
 }

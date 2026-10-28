@@ -17,8 +17,22 @@ export interface HttpResponse {
   readonly bodyText: string
 }
 
+export interface HttpStreamResponse {
+  readonly ok: boolean
+  readonly status: number
+  readonly headers: Headers
+  readonly body: AsyncIterable<Uint8Array>
+}
+
 export interface HttpTransport {
   request(request: HttpRequest): Promise<HttpResponse>
+  stream(request: HttpRequest): Promise<HttpStreamResponse>
+}
+
+export interface RisuNativeFetchOptions extends RequestInit {
+  readonly logFetch?: boolean
+  readonly requestTimeoutMs?: number
+  readonly networkRoute?: HttpRequest["networkRoute"]
 }
 
 export interface NativeFetchApi {
@@ -75,6 +89,40 @@ function throwRequestError(
   throw new LlmError("NETWORK_ERROR", "LLM network request failed.")
 }
 
+async function* emptyStream(): AsyncIterable<Uint8Array> {
+  const chunks: readonly Uint8Array[] = []
+  yield* chunks
+}
+
+function streamBody(
+  body: ReadableStream<Uint8Array>,
+  request: HttpRequest,
+  composed: ReturnType<typeof composeSignal>,
+): AsyncIterable<Uint8Array> {
+  const reader = body.getReader()
+  const cancel = () => { void reader.cancel() }
+  composed.signal.addEventListener("abort", cancel, { once: true })
+  return (async function* (): AsyncIterable<Uint8Array> {
+    let finished = false
+    try {
+      while (!finished) {
+        if (composed.signal.aborted) throwRequestError(request, composed)
+        const next = await reader.read()
+        if (composed.signal.aborted) throwRequestError(request, composed)
+        finished = next.done
+        if (!next.done && next.value.byteLength > 0) yield next.value
+      }
+    } catch (error) {
+      if (composed.signal.aborted) throwRequestError(request, composed)
+      throw error
+    } finally {
+      composed.signal.removeEventListener("abort", cancel)
+      if (!finished) await reader.cancel()
+      composed.cleanup()
+    }
+  })()
+}
+
 export class NativeFetchTransport implements HttpTransport {
   constructor(private readonly api: NativeFetchApi = risuai) {}
 
@@ -115,6 +163,52 @@ export class NativeFetchTransport implements HttpTransport {
       }
     } finally {
       composed.cleanup()
+    }
+  }
+
+  async stream(request: HttpRequest): Promise<HttpStreamResponse> {
+    const composed = composeSignal(request.signal, request.timeoutMs)
+    try {
+      const isHostedWeb = request.networkRoute === "local_network"
+        && await this.isHostedWeb(composed.signal)
+      if (isHostedWeb) {
+        throw new LlmError(
+          "UNSUPPORTED_RUNTIME",
+          "Local network endpoints are unavailable in the hosted web runtime.",
+        )
+      }
+      const response = await this.api.nativeFetch(request.url, {
+        method: request.method,
+        headers: { ...request.headers },
+        ...(request.body === undefined ? {} : { body: request.body }),
+        signal: composed.signal,
+        logFetch: false,
+        requestTimeoutMs: request.timeoutMs,
+        networkRoute: request.networkRoute,
+      })
+      if (!response.ok) {
+        composed.cleanup()
+        return {
+          ok: response.ok,
+          status: response.status,
+          headers: response.headers,
+          body: emptyStream(),
+        }
+      }
+      if (response.body === null) {
+        composed.cleanup()
+        throw new LlmError("INVALID_RESPONSE", "Provider returned an empty streaming response.")
+      }
+      return {
+        ok: response.ok,
+        status: response.status,
+        headers: response.headers,
+        body: streamBody(response.body, request, composed),
+      }
+    } catch (error) {
+      composed.cleanup()
+      if (error instanceof LlmError) throw error
+      throwRequestError(request, composed)
     }
   }
 

@@ -1,8 +1,9 @@
-import type { OllamaConfig } from "../core/types"
+import { LlmError } from "../core/errors"
 import type { HttpTransport } from "../network/native-fetch-transport"
 import { buildChatCompletionsUrl, networkRouteForUrl } from "../network/url-policy"
-import { fromOpenAiChatResponse, toOpenAiChatRequest } from "./openai-chat-protocol"
+import { fromOpenAiChatResponse, fromOpenAiChatStream, toOpenAiChatRequest } from "./openai-chat-protocol"
 import {
+  assertStreamResponse,
   parseJsonResponse,
   requireSecret,
   type LlmProvider,
@@ -13,27 +14,53 @@ export class OllamaProvider implements LlmProvider {
   constructor(private readonly transport: HttpTransport) {}
 
   async complete(execution: ProviderExecution) {
-    const config = execution.config as OllamaConfig
-    const url = buildChatCompletionsUrl(config.baseUrl)
+    if (execution.model.provider !== "ollama") {
+      throw new LlmError("CONFIG_INVALID", "Ollama provider received an incompatible model configuration.")
+    }
+    const model = execution.model
+    const body = toOpenAiChatRequest(model, execution.request)
+    const url = buildChatCompletionsUrl(model.baseUrl)
     const headers = {
       "content-type": "application/json",
-      ...(config.authMode === "bearer"
-        ? { Authorization: `Bearer ${requireSecret(execution.credential, "apiKey", config.provider)}` }
+      ...(model.authMode === "bearer"
+        ? { Authorization: `Bearer ${requireSecret(execution.credential, "apiKey", model.provider)}` }
         : {}),
     }
     const response = await this.transport.request({
       url,
       method: "POST",
       headers,
-      body: JSON.stringify(toOpenAiChatRequest(config, execution.request)),
+      body: JSON.stringify(body),
       ...(execution.options.signal === undefined ? {} : { signal: execution.options.signal }),
-      timeoutMs: execution.options.timeoutMs ?? config.timeoutMs,
+      timeoutMs: execution.options.timeoutMs ?? model.timeoutMs,
       networkRoute: networkRouteForUrl(url),
     })
-    return fromOpenAiChatResponse(
-      config.provider,
-      config.model,
-      parseJsonResponse(response, config.provider),
-    )
+    return fromOpenAiChatResponse(model, parseJsonResponse(response, model.provider))
+  }
+
+  async *stream(execution: ProviderExecution) {
+    if (execution.model.provider !== "ollama") {
+      throw new LlmError("CONFIG_INVALID", "Ollama provider received an incompatible model configuration.")
+    }
+    const model = execution.model
+    const body = toOpenAiChatRequest(model, execution.request, true)
+    const url = buildChatCompletionsUrl(model.baseUrl)
+    const response = await this.transport.stream({
+      url,
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Accept: "text/event-stream",
+        ...(model.authMode === "bearer"
+          ? { Authorization: `Bearer ${requireSecret(execution.credential, "apiKey", model.provider)}` }
+          : {}),
+      },
+      body: JSON.stringify(body),
+      ...(execution.options.signal === undefined ? {} : { signal: execution.options.signal }),
+      timeoutMs: execution.options.timeoutMs ?? model.timeoutMs,
+      networkRoute: networkRouteForUrl(url),
+    })
+    assertStreamResponse(response, model.provider)
+    yield* fromOpenAiChatStream(model, response.body, execution.options.signal)
   }
 }

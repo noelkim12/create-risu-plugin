@@ -1,6 +1,6 @@
 # ${프로젝트명}
 
-Vanilla TypeScript scaffold for a Risuai API v3 plugin. It builds one JavaScript file with Vite and registers a visible Risuai action button that opens a small iframe-local panel. A settings entry is also registered as a fallback entry point.
+Vanilla TypeScript scaffold for a Risuai API v3 plugin. It builds one JavaScript file with Vite and registers a Risuai settings entry that opens a small iframe-local panel.
 
 ## Scripts
 
@@ -8,6 +8,7 @@ Vanilla TypeScript scaffold for a Risuai API v3 plugin. It builds one JavaScript
 npm run dev
 npm run build
 npm run typecheck
+npm run mock
 ```
 
 - `npm run dev` runs Vite watch mode and rebuilds `dist/${파일명}.js` after source changes.
@@ -19,14 +20,20 @@ npm run typecheck
 1. Run `npm run dev` while editing, or `npm run build` before a manual import.
 2. In Risuai v3, open plugin import or file-based hot reload.
 3. Select `dist/${파일명}.js`.
-4. Click the generated action button, or open the generated settings entry, to show the iframe-local panel.
+4. Open the generated settings entry to show the iframe-local panel.
 
-The template doesn't open a network connection for development. Risuai reloads the built file you select.
+`npm run dev` rebuilds the selected file for Risuai. For a standalone browser preview, use `npm run mock`.
+
+## Mock Preview
+
+`npm run mock` starts a local Vite server and opens `/dev/`. Click a registered settings button to open the actual plugin UI in an iframe. Source edits reload the preview. `npm run dev` and `npm run build` still produce only the Risuai plugin bundle.
+
+Edit `dev/fixtures.ts` for sample character, chat, arguments and deterministic replies; extend `dev/runtime.ts` for additional APIs. See [Mock development](docs/mock.md) for supported APIs and limitations.
 
 ## Runtime Shape
 
-- `src/main.ts` registers a visible action button with `risuai.registerButton` and a fallback settings item with `risuai.registerSetting`.
-- Clicking either entry calls `risuai.showContainer("fullscreen")`.
+- `src/main.ts` registers the settings item with `risuai.registerSetting`.
+- Clicking the entry calls `risuai.showContainer("fullscreen")`.
 - `src/ui/panel.ts` renders into this plugin iframe only.
 - The panel increments a global `openCount` through `src/helpers/plugin-storage.ts` and `risuai.pluginStorage`.
 - Current character and chat data are resolved read-only through `src/helpers/chat-context.ts`.
@@ -34,7 +41,7 @@ The template doesn't open a network connection for development. Risuai reloads t
 
 ## Files
 
-- `src/main.ts`: plugin entry, action button registration, and settings registration.
+- `src/main.ts`: plugin entry and settings registration.
 - `src/styles.css`: global iframe-local panel styles imported by `src/main.ts`.
 - `src/ui/panel.ts`: iframe-local DOM panel.
 - `src/constants/plugin.ts`: generated plugin constants.
@@ -45,3 +52,7 @@ The template doesn't open a network connection for development. Risuai reloads t
 ## Optional Update URL
 
 The build output includes `//@api 3.0` and other plugin metadata. Add `//@update-url` in `vite.config.ts` only if you publish a stable hosted plugin file. Local import and file-based hot reload don't need it.
+
+When an AI service consumer is selected, generated README composition adds an
+AI Services section. Register credentials in its Keys section before configuring
+an authenticated consumer.
